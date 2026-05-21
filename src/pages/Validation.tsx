@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QrCode, Ticket, CheckCircle, XCircle, Search, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -21,6 +21,7 @@ export default function Validation() {
   const [code, setCode] = useState('');
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleValidate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,12 +62,19 @@ export default function Validation() {
         });
       }
       setIsLoading(false);
+      setCode('');
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
     }, 800);
   };
 
   const reset = () => {
     setCode('');
     setResult(null);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   };
 
   return (
@@ -107,6 +115,7 @@ export default function Validation() {
         <div className="p-8">
           <form onSubmit={handleValidate} className="relative mb-6">
             <input
+              ref={inputRef}
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}
