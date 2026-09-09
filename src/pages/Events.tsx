@@ -1,50 +1,61 @@
-import React, { useState } from 'react';
-import { Calendar, MapPin, Clock, Users, Ticket, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, MapPin, Clock, Users, Ticket, Check, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
+import { SalesStore } from '../lib/store';
 
-const EVENTS = [
-  {
-    id: 1,
-    title: 'Samba de Domingo',
-    date: '12 Nov 2023',
-    time: '16:00',
-    location: 'Palco Principal',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Pista', price: 30.00, available: 120 },
-      { id: 'vip', name: 'Área VIP', price: 80.00, available: 45 },
-    ]
-  },
-  {
-    id: 2,
-    title: 'Noite de Jazz',
-    date: '15 Nov 2023',
-    time: '20:00',
-    location: 'Lounge Bar',
-    image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Entrada', price: 50.00, available: 80 },
-      { id: 'table', name: 'Mesa (4 lugares)', price: 250.00, available: 10 },
-    ]
-  },
-  {
-    id: 3,
-    title: 'Rock Classics',
-    date: '18 Nov 2023',
-    time: '21:00',
-    location: 'Palco Principal',
-    image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Pista', price: 40.00, available: 200 },
-      { id: 'vip', name: 'Camarote', price: 100.00, available: 30 },
-    ]
-  }
-];
+interface EventTicket {
+  id: string;
+  name: string;
+  price: number;
+  available: number;
+}
+
+interface EventData {
+  id: number;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  image: string;
+  tickets: EventTicket[];
+}
 
 export default function Events() {
-  const [selectedEvent, setSelectedEvent] = useState<typeof EVENTS[0] | null>(null);
+  const [events, setEvents] = useState<EventData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [ticketSelection, setTicketSelection] = useState<{ [key: string]: number }>({});
+  const [purchasing, setPurchasing] = useState(false);
+
+  const fetchEvents = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date');
+
+      if (error) throw error;
+      setEvents((data || []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        date: e.date,
+        time: e.time,
+        location: e.location,
+        image: e.image,
+        tickets: Array.isArray(e.tickets) ? e.tickets : JSON.parse(e.tickets || '[]')
+      })));
+    } catch (err) {
+      console.error('Error fetching events:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const handleTicketChange = (ticketId: string, delta: number) => {
     setTicketSelection(prev => ({
@@ -57,58 +68,105 @@ export default function Events() {
     return acc + (ticket.price * (ticketSelection[ticket.id] || 0));
   }, 0) : 0;
 
-  const handlePurchase = () => {
-    alert(`Compra realizada com sucesso!\nTotal: R$ ${total.toFixed(2)}`);
-    setTicketSelection({});
-    setSelectedEvent(null);
+  const handlePurchase = async () => {
+    if (!selectedEvent || total === 0) return;
+    setPurchasing(true);
+
+    try {
+      for (const ticket of selectedEvent.tickets) {
+        const qty = ticketSelection[ticket.id] || 0;
+        for (let i = 0; i < qty; i++) {
+          const code = await SalesStore.generateCode();
+          await SalesStore.addItem({
+            code,
+            itemName: `${selectedEvent.title} - ${ticket.name}`,
+            itemId: selectedEvent.id,
+            price: ticket.price,
+            type: 'ticket'
+          });
+        }
+      }
+
+      const updatedTickets = selectedEvent.tickets.map(t => ({
+        ...t,
+        available: t.available - (ticketSelection[t.id] || 0)
+      }));
+
+      await supabase
+        .from('events')
+        .update({ tickets: updatedTickets })
+        .eq('id', selectedEvent.id);
+
+      setTicketSelection({});
+      setSelectedEvent(null);
+      fetchEvents();
+    } catch (err) {
+      console.error('Error purchasing tickets:', err);
+      alert('Erro ao processar compra. Tente novamente.');
+    } finally {
+      setPurchasing(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
-      {/* Events List */}
       <div className="flex-1 overflow-y-auto pr-2">
         <h2 className="text-2xl font-bold font-display text-stone-900 mb-6">Próximos Eventos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {EVENTS.map((event) => (
-            <motion.div
-              key={event.id}
-              layoutId={`event-${event.id}`}
-              onClick={() => setSelectedEvent(event)}
-              className={cn(
-                "group bg-white rounded-2xl border border-stone-100 overflow-hidden cursor-pointer transition-all hover:shadow-lg",
-                selectedEvent?.id === event.id ? "ring-2 ring-orange-500 border-transparent" : "hover:border-orange-200"
-              )}
-            >
-              <div className="h-48 overflow-hidden relative">
-                <img 
-                  src={event.image} 
-                  alt={event.title} 
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-sm font-bold text-stone-900 shadow-sm">
-                  {event.date}
-                </div>
-              </div>
-              <div className="p-5">
-                <h3 className="text-xl font-bold text-stone-900 mb-2">{event.title}</h3>
-                <div className="space-y-2 text-sm text-stone-500">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-orange-500" />
-                    {event.time}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-orange-500" />
-                    {event.location}
+        {events.length === 0 ? (
+          <div className="text-center py-12 text-stone-400">
+            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>Nenhum evento cadastrado</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {events.map((event) => (
+              <motion.div
+                key={event.id}
+                layoutId={`event-${event.id}`}
+                onClick={() => setSelectedEvent(event)}
+                className={cn(
+                  "group bg-white rounded-2xl border border-stone-100 overflow-hidden cursor-pointer transition-all hover:shadow-lg",
+                  selectedEvent?.id === event.id ? "ring-2 ring-orange-500 border-transparent" : "hover:border-orange-200"
+                )}
+              >
+                <div className="h-48 overflow-hidden relative">
+                  <img 
+                    src={event.image} 
+                    alt={event.title} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-sm font-bold text-stone-900 shadow-sm">
+                    {event.date}
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                <div className="p-5">
+                  <h3 className="text-xl font-bold text-stone-900 mb-2">{event.title}</h3>
+                  <div className="space-y-2 text-sm text-stone-500">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-orange-500" />
+                      {event.time}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-orange-500" />
+                      {event.location}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Ticket Sales Sidebar */}
       <AnimatePresence>
         {selectedEvent && (
           <motion.div
@@ -137,7 +195,7 @@ export default function Events() {
                 <div key={ticket.id} className="flex justify-between items-center p-4 bg-stone-50 rounded-xl border border-stone-100">
                   <div>
                     <p className="font-bold text-stone-900">{ticket.name}</p>
-                    <p className="text-sm text-stone-500">R$ {ticket.price.toFixed(2)}</p>
+                    <p className="text-sm text-stone-500">R$ {Number(ticket.price).toFixed(2)}</p>
                     <p className="text-xs text-orange-600 mt-1">{ticket.available} disponíveis</p>
                   </div>
                   <div className="flex items-center gap-3 bg-white rounded-lg border border-stone-200 p-1">
@@ -166,11 +224,11 @@ export default function Events() {
               </div>
               <button
                 onClick={handlePurchase}
-                disabled={total === 0}
+                disabled={total === 0 || purchasing}
                 className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-stone-200 flex items-center justify-center gap-2"
               >
-                <Check className="w-5 h-5" />
-                Confirmar Venda
+                {purchasing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+                {purchasing ? 'Processando...' : 'Confirmar Venda'}
               </button>
             </div>
           </motion.div>

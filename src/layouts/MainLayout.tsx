@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -14,26 +14,62 @@ import {
   Users,
   Armchair,
   Store,
-  ScanLine
+  ScanLine,
+  LogOut,
+  User,
+  MessageSquare,
+  QrCode,
+  CreditCard,
+  Headphones
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function MainLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const navSections = [
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  // Helper to check roles
+  const hasRole = (allowedRoles: string[]) => user && allowedRoles.includes(user.role);
+
+  const allNavSections = [
     {
       title: 'VISÃO GERAL',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/', label: 'Dashboard', icon: LayoutDashboard }
       ]
     },
     {
+      title: 'SAAS ADMIN',
+      roles: ['super_admin'],
+      items: [
+        { path: '/tenants', label: 'Gestão de Restaurantes', icon: Store },
+        { path: '/saas-users', label: 'Usuários SaaS', icon: Users },
+        { path: '/support-admin', label: 'Chamados (Suporte)', icon: MessageSquare }
+      ]
+    },
+    {
+      title: 'ATENDIMENTO',
+      roles: ['waiter', 'tenant_admin', 'manager', 'admin'],
+      items: [
+        { path: '/waiter', label: 'Mesas (Garçom)', icon: Armchair },
+      ]
+    },
+    {
       title: 'OPERAÇÃO',
+      roles: ['tenant_admin', 'manager', 'admin', 'cashier', 'waiter'],
       items: [
         { path: '/pos', label: 'Ponto de Venda', icon: Store },
+        { path: '/pix-terminal', label: 'Maquininha PIX', icon: QrCode },
         { path: '/tables', label: 'Gestão de Mesas', icon: Armchair },
         { 
           path: '/delivery', 
@@ -49,7 +85,15 @@ export default function MainLayout() {
       ]
     },
     {
+      title: 'COZINHA',
+      roles: ['kitchen'],
+      items: [
+        { path: '/delivery/manage', label: 'Painel da Cozinha', icon: ChefHat },
+      ]
+    },
+    {
       title: 'CONSUMO',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/bar', label: 'Bar & Fichas', icon: Beer },
         { path: '/events', label: 'Eventos & Ingressos', icon: Ticket },
@@ -57,17 +101,29 @@ export default function MainLayout() {
     },
     {
       title: 'FINANCEIRO',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/cover', label: 'Couvert Artístico', icon: Music2 },
       ]
     },
     {
-      title: 'GESTÃO',
+      title: 'GESTÃO & CONFIG',
+      roles: ['tenant_admin', 'admin'],
       items: [
         { path: '/users', label: 'Equipe & Acessos', icon: Users },
+        { path: '/integrations', label: 'Integrações (Pagamento)', icon: CreditCard },
+      ]
+    },
+    {
+      title: 'AJUDA',
+      roles: ['tenant_admin', 'admin', 'manager'],
+      items: [
+        { path: '/helpdesk', label: 'Central de Suporte', icon: Headphones },
       ]
     }
   ];
+
+  const navSections = allNavSections.filter(section => hasRole(section.roles));
 
   const isDeliveryActive = location.pathname.startsWith('/delivery');
 
@@ -136,10 +192,24 @@ export default function MainLayout() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-stone-100">
-          <button className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium">
-            <Settings className="w-4 h-4" />
-            <span>Configurações</span>
+        <div className="p-4 border-t border-stone-100 space-y-2">
+          {user && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50">
+              <div className="w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-stone-900 truncate">{user.name}</p>
+                <p className="text-xs text-stone-500 capitalize">{user.role}</p>
+              </div>
+            </div>
+          )}
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sair</span>
           </button>
         </div>
       </aside>

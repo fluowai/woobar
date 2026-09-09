@@ -1,54 +1,102 @@
-import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+import type { SoldItem } from './database.types';
 
-export interface SoldItem {
+export type { SoldItem };
+
+interface AddItemInput {
   code: string;
   itemName: string;
+  itemId?: number;
   price: number;
-  purchaseTime: string;
-  status: 'valid' | 'used';
   type: 'token' | 'ticket';
+  status?: 'valid' | 'used';
+  tenantId?: string;
+  purchaseTime?: string;
 }
 
-// Simple in-memory store backed by localStorage for persistence across reloads
-const STORAGE_KEY = 'woobar_sold_items';
-
-export const SalesStore = {
-  getItems: (): SoldItem[] => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+const salesApi = {
+  async getItems() {
+    const { data, error } = await supabase
+      .from('sold_items')
+      .select('*')
+      .order('id', { ascending: false });
+    if (error) throw error;
+    return data as SoldItem[];
   },
 
-  addItem: (item: Omit<SoldItem, 'status' | 'purchaseTime'>) => {
-    const items = SalesStore.getItems();
-    const newItem: SoldItem = {
-      ...item,
-      status: 'valid',
-      purchaseTime: new Date().toLocaleString('pt-BR'),
-    };
-    items.push(newItem);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    return newItem;
+  async addItem(item: AddItemInput) {
+    const { data, error } = await supabase
+      .from('sold_items')
+      .insert({
+        code: item.code,
+        item_name: item.itemName,
+        item_id: item.itemId || null,
+        price: item.price,
+        status: item.status || 'valid',
+        type: item.type,
+        purchase_time: item.purchaseTime || new Date().toISOString()
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      code: data.code,
+      itemName: data.item_name,
+      itemId: data.item_id,
+      price: data.price,
+      purchaseTime: data.purchase_time,
+      status: data.status,
+      type: data.type
+    } as SoldItem;
   },
 
-  validateCode: (code: string): SoldItem | null => {
-    const items = SalesStore.getItems();
-    return items.find(i => i.code === code) || null;
+  async validateCode(code: string) {
+    const { data, error } = await supabase
+      .from('sold_items')
+      .select('*')
+      .eq('code', code)
+      .single();
+    if (error) return null;
+    return {
+      id: data.id,
+      code: data.code,
+      itemName: data.item_name,
+      itemId: data.item_id,
+      price: data.price,
+      purchaseTime: data.purchase_time,
+      status: data.status,
+      type: data.type
+    } as SoldItem;
   },
 
-  markAsUsed: (code: string): boolean => {
-    const items = SalesStore.getItems();
-    const index = items.findIndex(i => i.code === code);
-    
-    if (index !== -1 && items[index].status === 'valid') {
-      items[index].status = 'used';
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-      return true;
+  async markAsUsed(code: string) {
+    const { data, error } = await supabase
+      .from('sold_items')
+      .update({ 
+        status: 'used',
+        purchase_time: new Date().toISOString()
+      })
+      .eq('code', code)
+      .eq('status', 'valid')
+      .select()
+      .single();
+    if (error) return false;
+    return !!data;
+  },
+
+  async generateCode(): Promise<string> {
+    const code = Math.floor(10000 + Math.random() * 90000).toString();
+    const existing = await supabase
+      .from('sold_items')
+      .select('code')
+      .eq('code', code)
+      .single();
+    if (existing.data) {
+      return salesApi.generateCode();
     }
-    return false;
-  },
-
-  // Helper to generate a random 4-digit code
-  generateCode: () => {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return code;
   }
 };
+
+export const SalesStore = salesApi;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Clock, 
   CheckCircle, 
@@ -15,15 +15,18 @@ import {
   MessageSquare,
   Filter,
   ArrowUpDown,
-  DollarSign
+  DollarSign,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import DeliveryMap from '../components/DeliveryMap';
 import GoogleDeliveryMap from '../components/GoogleDeliveryMap';
 import OrderChat from '../components/OrderChat';
-import { MOCK_USERS, User } from '../data/users';
+import { supabase } from '../lib/supabase';
+import { useUsers } from '../hooks/useUsers';
 import { autoDispatch, getDistanceFromLatLonInKm } from '../lib/dispatchSystem';
+import type { User } from '../data/users';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered';
 type SortOption = 'time' | 'value';
@@ -40,50 +43,6 @@ interface Order {
   location?: { lat: number; lng: number };
 }
 
-const MOCK_ORDERS: Order[] = [
-  {
-    id: '#2021',
-    customer: 'Ana Silva',
-    items: ['2x Woobar Classic', '1x Coca-Cola'],
-    total: 78.80,
-    status: 'pending',
-    time: '10 min',
-    address: 'Rua das Flores, 123 - Centro',
-    location: { lat: -23.5489, lng: -46.6388 }
-  },
-  {
-    id: '#2020',
-    customer: 'Carlos Oliveira',
-    items: ['1x Smash Duplo', '1x Batata Rústica'],
-    total: 47.80,
-    status: 'preparing',
-    time: '25 min',
-    address: 'Av. Paulista, 1000 - Apt 45',
-    location: { lat: -23.5615, lng: -46.6559 }
-  },
-  {
-    id: '#2019',
-    customer: 'Beatriz Santos',
-    items: ['3x Gin Tônica', '1x Coxinha da Asa'],
-    total: 108.90,
-    status: 'ready',
-    time: '40 min',
-    address: 'Rua Augusta, 500',
-    location: { lat: -23.5531, lng: -46.6543 }
-  },
-  {
-    id: '#2018',
-    customer: 'João Souza',
-    items: ['1x Veggie Supreme'],
-    total: 30.90,
-    status: 'delivering',
-    time: '55 min',
-    address: 'Rua Bela Cintra, 200',
-    courierId: '3', // Assigned to Marcos
-    location: { lat: -23.5567, lng: -46.6623 }
-  }
-];
-
 interface OrderCardProps {
   order: Order;
   couriers: User[];
@@ -97,6 +56,16 @@ const getOrderPriority = (timeStr: string): 'normal' | 'warning' | 'late' => {
   if (minutes >= 50) return 'late';
   if (minutes >= 30) return 'warning';
   return 'normal';
+};
+
+const getTimeSince = (dateString: string): string => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'agora';
+  if (diffMins < 60) return `${diffMins} min`;
+  return `${Math.floor(diffMins / 60)}h`;
 };
 
 const calculateETA = (order: Order, courier?: User) => {
@@ -303,16 +272,52 @@ const OrderCard: React.FC<OrderCardProps> = ({
 };
 
 export default function DeliveryManager() {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
-  const [couriers, setCouriers] = useState<User[]>(MOCK_USERS.filter(u => u.role === 'courier'));
+  const { users: allUsers, loading: usersLoading } = useUsers();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [couriers, setCouriers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [autoDispatchEnabled, setAutoDispatchEnabled] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedOrderForChat, setSelectedOrderForChat] = useState<Order | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('time');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
   
-  // Use environment variable for API key
-  const googleMapsApiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOrders((data || []).map((o: any) => ({
+        id: o.id,
+        customer: o.customer,
+        items: Array.isArray(o.items) ? o.items : [],
+        total: o.total,
+        status: o.status || 'pending',
+        time: o.created_at ? getTimeSince(o.created_at) : '0 min',
+        address: o.address || '',
+        courierId: o.courier_id,
+        location: o.location
+      })));
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    const courierList = allUsers.filter(u => u.role === 'courier');
+    setCouriers(courierList);
+  }, [allUsers]);
 
   // Simulate courier movement - Updated to 15 seconds as requested
   useEffect(() => {
@@ -323,14 +328,14 @@ export default function DeliveryManager() {
           return {
             ...c,
             currentLocation: {
-              lat: c.currentLocation.lat + (Math.random() - 0.5) * 0.002, // Slightly larger movement for longer interval
+              lat: c.currentLocation.lat + (Math.random() - 0.5) * 0.002,
               lng: c.currentLocation.lng + (Math.random() - 0.5) * 0.002
             }
           };
         }
         return c;
       }));
-    }, 15000); // 15 seconds
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -339,29 +344,69 @@ export default function DeliveryManager() {
     if (autoDispatchEnabled) {
       const assignments = autoDispatch(orders, couriers);
       if (assignments.length > 0) {
-        setOrders(prev => prev.map(o => {
-          const assignment = assignments.find(a => a.orderId === o.id);
-          if (assignment) {
-            return { ...o, courierId: assignment.courierId, status: 'delivering' };
+        const updateOrders = async () => {
+          for (const assignment of assignments) {
+            try {
+              const { error } = await supabase
+                .from('orders')
+                .update({ 
+                  courier_id: assignment.courierId,
+                  status: 'delivering',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', assignment.orderId);
+
+              if (error) throw error;
+            } catch (err) {
+              console.error('Error auto-dispatching order:', err);
+            }
           }
-          return o;
-        }));
-        
-        // Mark couriers as busy
-        setCouriers(prev => prev.map(c => {
-          if (assignments.find(a => a.courierId === c.id)) {
-            return { ...c, isAvailable: false };
-          }
-          return c;
-        }));
+          
+          setOrders(prev => prev.map(o => {
+            const assignment = assignments.find(a => a.orderId === o.id);
+            if (assignment) {
+              return { ...o, courierId: assignment.courierId, status: 'delivering' };
+            }
+            return o;
+          }));
+          
+          setCouriers(prev => prev.map(c => {
+            if (assignments.find(a => a.courierId === c.id)) {
+              return { ...c, isAvailable: false };
+            }
+            return c;
+          }));
+        };
+        updateOrders();
       }
     }
   }, [autoDispatchEnabled, orders, couriers]);
 
-  const moveStatus = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
+  const moveStatus = async (orderId: string, newStatus: OrderStatus) => {
+    try {
+      const updates: any = { 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (newStatus === 'delivering') {
+        updates.delivered_at = null;
+      } else if (newStatus === 'delivered') {
+        updates.delivered_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', orderId);
+
+      if (error) throw error;
+      setOrders(prev => prev.map(order => 
+        order.id === orderId ? { ...order, status: newStatus } : order
+      ));
+    } catch (err) {
+      console.error('Error updating order status:', err);
+    }
   };
 
   const toggleCourierAvailability = (courierId: string) => {
@@ -455,7 +500,15 @@ export default function DeliveryManager() {
   };
 
   const preparingCount = orders.filter(o => o.status === 'preparing').length;
-  const isOverloaded = preparingCount >= 2; // Threshold for demo purposes
+  const isOverloaded = preparingCount >= 2;
+
+  if (loading || usersLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">

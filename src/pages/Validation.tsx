@@ -23,16 +23,15 @@ export default function Validation() {
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleValidate = (e: React.FormEvent) => {
+  const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
 
     setIsLoading(true);
     setResult(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const item = SalesStore.validateCode(code);
+    try {
+      const item = await SalesStore.validateCode(code);
 
       if (!item) {
         setResult({
@@ -50,8 +49,7 @@ export default function Validation() {
           }
         });
       } else {
-        // Mark as used
-        SalesStore.markAsUsed(code);
+        await SalesStore.markAsUsed(code);
         setResult({
           status: 'valid',
           message: 'Código Válido!',
@@ -61,12 +59,19 @@ export default function Validation() {
           }
         });
       }
+    } catch (err) {
+      console.error('Error validating code:', err);
+      setResult({
+        status: 'invalid',
+        message: 'Erro ao validar código',
+      });
+    } finally {
       setIsLoading(false);
       setCode('');
       setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
-    }, 800);
+    }
   };
 
   const reset = () => {

@@ -9,42 +9,60 @@ import {
   ChefHat, 
   LayoutDashboard 
 } from 'lucide-react';
-import { MOCK_USERS, User, UserRole } from '../data/users';
+import { useUsers } from '../hooks/useUsers';
+import type { UserRole } from '../lib/database.types';
 import { cn } from '../lib/utils';
 
 const RoleBadge = ({ role }: { role: UserRole }) => {
-  const styles = {
+  const styles: Record<string, string> = {
+    super_admin: 'bg-purple-100 text-purple-700 border-purple-200',
+    tenant_admin: 'bg-blue-100 text-blue-700 border-blue-200',
     admin: 'bg-purple-100 text-purple-700 border-purple-200',
     manager: 'bg-blue-100 text-blue-700 border-blue-200',
+    waiter: 'bg-amber-100 text-amber-700 border-amber-200',
     kitchen: 'bg-orange-100 text-orange-700 border-orange-200',
-    courier: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    courier: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    cashier: 'bg-cyan-100 text-cyan-700 border-cyan-200'
   };
 
-  const icons = {
+  const icons: Record<string, any> = {
+    super_admin: Shield,
+    tenant_admin: Shield,
     admin: Shield,
     manager: LayoutDashboard,
+    waiter: LayoutDashboard,
     kitchen: ChefHat,
-    courier: Bike
+    courier: Bike,
+    cashier: LayoutDashboard
   };
 
-  const Icon = icons[role];
+  const Icon = icons[role] || Shield;
+  const label = role.replace(/_/g, ' ');
 
   return (
-    <span className={cn("px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 w-fit", styles[role])}>
+    <span className={cn("px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 w-fit", styles[role] || styles.admin)}>
       <Icon className="w-3 h-3" />
-      {role.charAt(0).toUpperCase() + role.slice(1)}
+      {label.charAt(0).toUpperCase() + label.slice(1)}
     </span>
   );
 };
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const { users, loading, updateUserStatus } = useUsers();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -60,7 +78,6 @@ export default function UsersPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
-        {/* Toolbar */}
         <div className="p-4 border-b border-stone-100 flex gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
@@ -74,7 +91,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-stone-50 text-stone-500 text-xs uppercase font-bold">
@@ -90,7 +106,7 @@ export default function UsersPage() {
                 <tr key={user.id} className="hover:bg-stone-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full bg-stone-200" referrerPolicy="no-referrer" />
+                      <img src={user.avatar || `https://i.pravatar.cc/150?u=${user.id}`} alt={user.name} className="w-10 h-10 rounded-full bg-stone-200" referrerPolicy="no-referrer" />
                       <div>
                         <p className="font-bold text-stone-900">{user.name}</p>
                         <p className="text-sm text-stone-500">{user.email}</p>
@@ -109,7 +125,11 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
+                    <button 
+                      onClick={() => updateUserStatus(user.id, user.status === 'active' ? 'inactive' : 'active')}
+                      className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"
+                      title={user.status === 'active' ? 'Desativar' : 'Ativar'}
+                    >
                       <MoreVertical className="w-4 h-4" />
                     </button>
                   </td>

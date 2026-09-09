@@ -1,51 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Coffee, CheckCircle, Clock, AlertCircle, DollarSign, X } from 'lucide-react';
+import { Users, Coffee, CheckCircle, Clock, AlertCircle, DollarSign, X, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-
-type TableStatus = 'free' | 'occupied' | 'reserved' | 'dirty';
-
-interface Table {
-  id: number;
-  name: string;
-  seats: number;
-  status: TableStatus;
-  orders?: {
-    items: number;
-    total: number;
-    time: string;
-  };
-}
-
-const MOCK_TABLES: Table[] = Array.from({ length: 16 }, (_, i) => ({
-  id: i + 1,
-  name: `Mesa ${i + 1}`,
-  seats: i % 3 === 0 ? 6 : i % 2 === 0 ? 4 : 2,
-  status: i === 2 || i === 5 ? 'occupied' : i === 8 ? 'reserved' : i === 10 ? 'dirty' : 'free',
-  orders: (i === 2 || i === 5) ? {
-    items: i === 2 ? 4 : 12,
-    total: i === 2 ? 145.50 : 480.00,
-    time: i === 2 ? '25 min' : '1h 15min'
-  } : undefined
-}));
+import { supabase } from '../lib/supabase';
+import type { Table, TableStatus } from '../lib/database.types';
 
 export default function TableManager() {
-  const [tables, setTables] = useState<Table[]>(MOCK_TABLES);
+  const [tables, setTables] = useState<Table[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const statusColors = {
+  const fetchTables = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tables')
+        .select('*')
+        .order('id');
+
+      if (error) throw error;
+      setTables((data || []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        seats: t.seats,
+        status: t.status,
+        orders: t.orders
+      })));
+    } catch (err) {
+      console.error('Error fetching tables:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTables();
+  }, [fetchTables]);
+
+  const updateTableStatus = async (tableId: number, newStatus: TableStatus) => {
+    try {
+      const updates: any = { 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (newStatus === 'free') {
+        updates.orders = null;
+      }
+
+      const { error } = await supabase
+        .from('tables')
+        .update(updates)
+        .eq('id', tableId);
+
+      if (error) throw error;
+      setTables(prev => prev.map(t => t.id === tableId ? { ...t, ...updates, status: newStatus, orders: newStatus === 'free' ? undefined : t.orders } : t));
+      setSelectedTable(null);
+    } catch (err) {
+      console.error('Error updating table:', err);
+    }
+  };
+
+  const statusColors: Record<TableStatus, string> = {
     free: 'bg-emerald-100 text-emerald-700 border-emerald-200',
     occupied: 'bg-orange-100 text-orange-700 border-orange-200',
     reserved: 'bg-blue-100 text-blue-700 border-blue-200',
     dirty: 'bg-red-100 text-red-700 border-red-200'
   };
 
-  const statusLabels = {
+  const statusLabels: Record<TableStatus, string> = {
     free: 'Livre',
     occupied: 'Ocupada',
     reserved: 'Reservada',
     dirty: 'Limpeza'
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -55,14 +90,14 @@ export default function TableManager() {
           <p className="text-stone-500">Mapa do salão e status em tempo real</p>
         </div>
         <div className="flex gap-4">
-          {Object.entries(statusLabels).map(([key, label]) => (
+          {(Object.keys(statusLabels) as TableStatus[]).map((key) => (
             <div key={key} className="flex items-center gap-2">
               <div className={cn("w-3 h-3 rounded-full", 
                 key === 'free' ? 'bg-emerald-500' :
                 key === 'occupied' ? 'bg-orange-500' :
                 key === 'reserved' ? 'bg-blue-500' : 'bg-red-500'
               )} />
-              <span className="text-sm text-stone-600">{label}</span>
+              <span className="text-sm text-stone-600">{statusLabels[key]}</span>
             </div>
           ))}
         </div>
@@ -94,15 +129,15 @@ export default function TableManager() {
               </span>
               {table.status === 'occupied' && table.orders && (
                 <div className="text-xs opacity-80 font-mono">
-                  R$ {table.orders.total.toFixed(2)}
+                  R$ {Number(table.orders.total).toFixed(2)}
                 </div>
               )}
             </div>
 
-            {table.status === 'occupied' && (
+            {table.status === 'occupied' && table.orders && (
               <div className="absolute bottom-4 flex items-center gap-1 text-xs font-medium bg-white/40 px-2 py-1 rounded-full">
                 <Clock className="w-3 h-3" />
-                {table.orders?.time}
+                {table.orders.time}
               </div>
             )}
           </motion.button>
@@ -130,18 +165,7 @@ export default function TableManager() {
               </div>
 
               <div className="p-6 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <button className="p-4 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100 transition-colors flex flex-col items-center gap-2">
-                    <Coffee className="w-6 h-6 text-stone-600" />
-                    <span className="text-sm font-bold text-stone-700">Adicionar Pedido</span>
-                  </button>
-                  <button className="p-4 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100 transition-colors flex flex-col items-center gap-2">
-                    <DollarSign className="w-6 h-6 text-stone-600" />
-                    <span className="text-sm font-bold text-stone-700">Fechar Conta</span>
-                  </button>
-                </div>
-
-                {selectedTable.status === 'occupied' && (
+                {selectedTable.status === 'occupied' && selectedTable.orders && (
                   <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
                     <h3 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
                       <Clock className="w-4 h-4 text-stone-400" />
@@ -150,15 +174,15 @@ export default function TableManager() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-stone-500">Tempo Ocupado</span>
-                        <span className="font-mono font-medium">{selectedTable.orders?.time}</span>
+                        <span className="font-mono font-medium">{selectedTable.orders.time}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-stone-500">Itens Pedidos</span>
-                        <span className="font-mono font-medium">{selectedTable.orders?.items}</span>
+                        <span className="font-mono font-medium">{selectedTable.orders.items?.length || 0}</span>
                       </div>
                       <div className="border-t border-stone-200 pt-2 mt-2 flex justify-between text-base font-bold">
                         <span>Total Parcial</span>
-                        <span>R$ {selectedTable.orders?.total.toFixed(2)}</span>
+                        <span>R$ {Number(selectedTable.orders.total).toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -166,12 +190,34 @@ export default function TableManager() {
 
                 <div className="flex gap-2">
                   {selectedTable.status === 'free' && (
-                    <button className="flex-1 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors">
+                    <button 
+                      onClick={() => updateTableStatus(selectedTable.id, 'occupied')}
+                      className="flex-1 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors"
+                    >
                       Abrir Mesa
                     </button>
                   )}
+                  {selectedTable.status === 'occupied' && (
+                    <button 
+                      onClick={() => updateTableStatus(selectedTable.id, 'dirty')}
+                      className="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 transition-colors"
+                    >
+                      Fechar Conta
+                    </button>
+                  )}
+                  {selectedTable.status === 'reserved' && (
+                    <button 
+                      onClick={() => updateTableStatus(selectedTable.id, 'occupied')}
+                      className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                    >
+                      Confirmar Reserva
+                    </button>
+                  )}
                   {selectedTable.status === 'dirty' && (
-                    <button className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors">
+                    <button 
+                      onClick={() => updateTableStatus(selectedTable.id, 'free')}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors"
+                    >
                       Liberar Mesa
                     </button>
                   )}

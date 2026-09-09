@@ -1,83 +1,157 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingCart, CreditCard, Banknote, QrCode, Trash2, Plus, Minus, X, CheckCircle, Printer, History, Clock } from 'lucide-react';
+import { Search, ShoppingCart, CreditCard, Banknote, QrCode, Trash2, Plus, Minus, X, CheckCircle, Printer, History, Clock, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { SalesStore, SoldItem } from '../lib/store';
+import { supabase } from '../lib/supabase';
+import { useMenu } from '../hooks/useMenu';
+import { useAuth } from '../contexts/AuthContext';
+import type { MenuItem } from '../lib/database.types';
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  category: 'drinks' | 'food' | 'portions';
-  image?: string;
-}
-
-interface CartItem extends Product {
+interface CartItem extends MenuItem {
   quantity: number;
 }
 
-const PRODUCTS: Product[] = [
-  { id: '1', name: 'Heineken 600ml', price: 18.00, category: 'drinks' },
-  { id: '2', name: 'Gin Tônica', price: 32.00, category: 'drinks' },
-  { id: '3', name: 'Caipirinha', price: 25.00, category: 'drinks' },
-  { id: '4', name: 'Água s/ Gás', price: 6.00, category: 'drinks' },
-  { id: '5', name: 'Coca-Cola', price: 8.00, category: 'drinks' },
-  { id: '6', name: 'Batata Frita', price: 28.00, category: 'portions' },
-  { id: '7', name: 'Isca de Frango', price: 35.00, category: 'portions' },
-  { id: '8', name: 'Hambúrguer Clássico', price: 38.00, category: 'food' },
-  { id: '9', name: 'Pizza Margherita', price: 45.00, category: 'food' },
-];
-
 export default function POS() {
+  const { items: menuItems, loading: menuLoading } = useMenu();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<'all' | 'drinks' | 'food' | 'portions'>('all');
+  const [category, setCategory] = useState<string>('all');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [generatedCodes, setGeneratedCodes] = useState<SoldItem[]>([]);
-  const [recentSales, setRecentSales] = useState<SoldItem[]>([]);
+  const [generatedCodes, setGeneratedCodes] = useState<Array<{code: string; itemName: string; price: number}>>([]);
+  const [recentSales, setRecentSales] = useState<Array<any>>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const filteredProducts = PRODUCTS.filter(p => 
+  const filteredProducts = menuItems.filter(p => 
     (category === 'all' || p.category === category) &&
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openHistory = () => {
-    const items = SalesStore.getItems().reverse(); // Show newest first
-    setRecentSales(items);
-    setIsHistoryOpen(true);
+  const openHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('sold_items')
+        .select('*')
+        .order('purchase_time', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setRecentSales((data || []).map((item: any) => ({
+        itemName: item.item_name,
+        code: item.code,
+        purchaseTime: item.purchase_time,
+        price: item.price,
+        status: item.status
+      })));
+    } catch (err) {
+      console.error('Error fetching sales history:', err);
+    } finally {
+      setLoadingHistory(false);
+      setIsHistoryOpen(true);
+    }
+  }, []);
+
+  const generateUniqueCode = async (): Promise<string> => {
+    return Math.floor(10000 + Math.random() * 90000).toString();
   };
 
-  const handlePayment = (method: 'card' | 'cash' | 'pix') => {
-    // Generate codes for each item in the cart
-    const newCodes: SoldItem[] = [];
+  const [isPixQRModalOpen, setIsPixQRModalOpen] = useState(false);
+
+  const printTicket = (codes: Array<{code: string; itemName: string}>) => {
+    const printContent = `
+      <div style="font-family: monospace; text-align: center; width: 300px; padding: 20px;">
+        <h2 style="margin:0 0 10px 0;">WooBar</h2>
+        <p style="margin:0; font-size: 12px;">Comprovante PIX</p>
+        <p style="margin:5px 0;">------------------------</p>
+        ${codes.map(c => `
+          <div style="margin: 5px 0; text-align: left;">
+            <b>${c.itemName}</b><br/>
+            Token: <span style="font-size: 16px;">${c.code}</span>
+          </div>
+        `).join('')}
+        <p style="margin:5px 0;">------------------------</p>
+        <p style="margin:0; font-size: 12px;">Data: ${new Date().toLocaleString()}</p>
+        <p style="font-size: 10px; margin-top: 15px;">Apresente no balcão</p>
+      </div>
+    `;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write('<html><head><title>Imprimir Ticket</title></head><body>');
+      printWindow.document.write(printContent);
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
+
+  const handlePayment = async (method: 'card' | 'cash' | 'pix') => {
+    if (method === 'pix') {
+      setIsPaymentModalOpen(false);
+      setIsPixQRModalOpen(true);
+      return;
+    }
+    await finalizeSale();
+  };
+
+  const { user } = useAuth();
+  
+  const finalizeSale = async () => {
+    if (!user?.tenantId && user?.role !== 'super_admin') {
+      alert('Erro: Restaurante não identificado.');
+      return;
+    }
+
+    setIsProcessing(true);
+    const newCodes: Array<{code: string; itemName: string; price: number}> = [];
     
-    cart.forEach(item => {
-      for (let i = 0; i < item.quantity; i++) {
-        const code = Math.floor(1000 + Math.random() * 9000).toString();
-        const soldItem = {
-          code,
-          itemName: item.name,
-          price: item.price,
-          type: item.category === 'drinks' ? 'token' as const : 'ticket' as const, // Simplified logic
-          purchaseTime: new Date().toLocaleString('pt-BR'),
-          status: 'valid' as const
-        };
-        
-        // Save to store
-        const savedItem = SalesStore.addItem(soldItem);
-        newCodes.push(savedItem);
+    try {
+      // 1. Generate codes and prepare insert payload
+      const payload = [];
+      for (const item of cart) {
+        for (let i = 0; i < item.quantity; i++) {
+          const code = await generateUniqueCode();
+          newCodes.push({ code, itemName: item.name, price: item.price });
+          
+          payload.push({
+            tenant_id: user.tenantId || '11111111-1111-1111-1111-111111111111', // default to test_tenant if super_admin for testing
+            code: code,
+            item_name: item.name,
+            item_id: item.id,
+            price: item.price,
+            status: 'valid',
+            type: 'token'
+          });
+        }
       }
-    });
 
-    setGeneratedCodes(newCodes);
-    setIsPaymentModalOpen(false);
-    setIsSuccessModalOpen(true);
-    setCart([]); // Clear cart
+      // 2. Insert into Supabase
+      const { error } = await supabase.from('sold_items').insert(payload);
+      if (error) throw error;
+
+      setGeneratedCodes(newCodes);
+      setIsPixQRModalOpen(false);
+      setIsPaymentModalOpen(false);
+      setIsSuccessModalOpen(true);
+      setCart([]);
+      
+      // Auto-print the ticket after success
+      setTimeout(() => printTicket(newCodes), 1000);
+    } catch (err) {
+      console.error('Error processing payment:', err);
+      alert('Erro ao processar venda. Tente novamente.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: MenuItem) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -89,11 +163,11 @@ export default function POS() {
     });
   };
 
-  const removeFromCart = (id: string) => {
+  const removeFromCart = (id: number) => {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateQuantity = (id: string, delta: number) => {
+  const updateQuantity = (id: number, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         return { ...item, quantity: Math.max(1, item.quantity + delta) };
@@ -106,7 +180,6 @@ export default function POS() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-stone-50 overflow-hidden">
-      {/* Product Selection Area */}
       <div className="flex-1 flex flex-col p-6 gap-6">
         <div className="flex justify-between items-center">
           <div>
@@ -134,12 +207,11 @@ export default function POS() {
           </div>
         </div>
 
-        {/* Categories */}
         <div className="flex gap-2 pb-2 overflow-x-auto">
-          {['all', 'drinks', 'food', 'portions'].map((cat) => (
+          {['all', 'Burgers', 'Porções', 'Bebidas', 'Drinks'].map((cat) => (
             <button
               key={cat}
-              onClick={() => setCategory(cat as any)}
+              onClick={() => setCategory(cat)}
               className={cn(
                 "px-6 py-2 rounded-full text-sm font-bold capitalize transition-all",
                 category === cat 
@@ -147,12 +219,11 @@ export default function POS() {
                   : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"
               )}
             >
-              {cat === 'all' ? 'Todos' : cat === 'drinks' ? 'Bebidas' : cat === 'food' ? 'Lanches' : 'Porções'}
+              {cat === 'all' ? 'Todos' : cat}
             </button>
           ))}
         </div>
 
-        {/* Product Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pb-20">
           {filteredProducts.map((product) => (
             <motion.button
@@ -177,7 +248,6 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Cart Sidebar */}
       <div className="w-96 bg-white border-l border-stone-200 flex flex-col shadow-xl z-20">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h2 className="text-xl font-bold font-display flex items-center gap-2">
@@ -243,16 +313,15 @@ export default function POS() {
           </div>
           
           <button 
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || isProcessing}
             onClick={() => setIsPaymentModalOpen(true)}
             className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-stone-900/20 flex items-center justify-center gap-2"
           >
-            Finalizar Venda
+            {isProcessing ? 'Processando...' : 'Finalizar Venda'}
           </button>
         </div>
       </div>
 
-      {/* Payment Modal */}
       <AnimatePresence>
         {isPaymentModalOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -270,15 +339,27 @@ export default function POS() {
               </div>
               
               <div className="p-8 grid grid-cols-2 gap-4">
-                <button onClick={() => handlePayment('card')} className="p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group">
+                <button 
+                  onClick={() => handlePayment('card')} 
+                  disabled={isProcessing}
+                  className="p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group disabled:opacity-50"
+                >
                   <CreditCard className="w-8 h-8 text-stone-400 group-hover:text-stone-900" />
                   <span className="font-bold text-stone-600 group-hover:text-stone-900">Cartão</span>
                 </button>
-                <button onClick={() => handlePayment('cash')} className="p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group">
+                <button 
+                  onClick={() => handlePayment('cash')} 
+                  disabled={isProcessing}
+                  className="p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group disabled:opacity-50"
+                >
                   <Banknote className="w-8 h-8 text-stone-400 group-hover:text-stone-900" />
                   <span className="font-bold text-stone-600 group-hover:text-stone-900">Dinheiro</span>
                 </button>
-                <button onClick={() => handlePayment('pix')} className="p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group">
+                <button 
+                  onClick={() => handlePayment('pix')} 
+                  disabled={isProcessing}
+                  className="col-span-2 p-6 rounded-2xl bg-stone-50 border-2 border-stone-100 hover:border-stone-900 hover:bg-stone-100 transition-all flex flex-col items-center gap-3 group disabled:opacity-50"
+                >
                   <QrCode className="w-8 h-8 text-stone-400 group-hover:text-stone-900" />
                   <span className="font-bold text-stone-600 group-hover:text-stone-900">PIX</span>
                 </button>
@@ -293,7 +374,47 @@ export default function POS() {
         )}
       </AnimatePresence>
 
-      {/* Success Modal */}
+      <AnimatePresence>
+        {isPixQRModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-teal-50">
+                <h2 className="text-xl font-bold font-display text-teal-900 flex items-center gap-2">
+                  <QrCode className="w-5 h-5" /> PIX Digital
+                </h2>
+                <button onClick={() => setIsPixQRModalOpen(false)} className="p-2 hover:bg-teal-100 rounded-full text-teal-900">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-8 flex flex-col items-center text-center">
+                <p className="text-stone-500 mb-4 font-bold uppercase text-xs tracking-wider">Valor da Cobrança</p>
+                <h2 className="text-4xl font-mono font-bold text-stone-900 mb-6 truncate">R$ {total.toFixed(2)}</h2>
+                
+                <div className="w-48 h-48 bg-stone-100 p-2 rounded-2xl shadow-sm border border-stone-200 mb-6 flex items-center justify-center">
+                  <QrCode className="w-32 h-32 text-stone-900" />
+                </div>
+                
+                <p className="text-sm text-stone-500 mb-6">Escaneie o código com o app do seu banco para pagar.</p>
+                
+                <button 
+                  onClick={finalizeSale}
+                  disabled={isProcessing}
+                  className="w-full bg-teal-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all hover:bg-teal-600"
+                >
+                  {isProcessing ? 'Aprovando...' : 'Simular Pagamento Aprovado'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isSuccessModalOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -345,7 +466,6 @@ export default function POS() {
         )}
       </AnimatePresence>
 
-      {/* History Modal */}
       <AnimatePresence>
         {isHistoryOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Beer, Wine, GlassWater, Coffee, Trash2, Printer, CreditCard, Banknote, QrCode } from 'lucide-react';
+import { Beer, Wine, GlassWater, Coffee, Trash2, Printer, CreditCard, Banknote, QrCode, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { SalesStore } from '../lib/store';
 
 const QUICK_ITEMS = [
   { id: 'beer', name: 'Cerveja', price: 12.00, icon: Beer, color: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -16,6 +17,8 @@ const QUICK_ITEMS = [
 export default function BarTokens() {
   const [cart, setCart] = useState<{id: string, name: string, price: number, quantity: number}[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'credit' | 'debit' | 'cash' | 'pix'>('credit');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [generatedCodes, setGeneratedCodes] = useState<Array<{code: string; name: string; price: number}>>([]);
 
   const addToCart = (item: typeof QUICK_ITEMS[0]) => {
     setCart(prev => {
@@ -33,15 +36,68 @@ export default function BarTokens() {
 
   const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (cart.length === 0) return;
-    alert(`Imprimindo fichas...\nTotal: R$ ${total.toFixed(2)}\nPagamento: ${paymentMethod.toUpperCase()}`);
-    setCart([]);
+    setIsProcessing(true);
+
+    try {
+      const codes: Array<{code: string; name: string; price: number}> = [];
+      
+      for (const item of cart) {
+        for (let i = 0; i < item.quantity; i++) {
+          const code = await SalesStore.generateCode();
+          await SalesStore.addItem({
+            code,
+            itemName: item.name,
+            price: item.price,
+            type: 'token'
+          });
+          codes.push({ code, name: item.name, price: item.price });
+        }
+      }
+
+      setGeneratedCodes(codes);
+
+      const printContent = `
+        <div style="font-family: monospace; text-align: center; width: 300px; padding: 20px;">
+          <h2 style="margin:0 0 10px 0;">WooBar - Fichas</h2>
+          <p style="margin:0; font-size: 12px;">Pagamento: ${paymentMethod.toUpperCase()}</p>
+          <p style="margin:5px 0;">------------------------</p>
+          ${codes.map(c => `
+            <div style="margin: 5px 0; text-align: left;">
+              <b>${c.name}</b> - R$ ${c.price.toFixed(2)}<br/>
+              Ficha: <span style="font-size: 16px;">${c.code}</span>
+            </div>
+          `).join('')}
+          <p style="margin:5px 0;">------------------------</p>
+          <p style="margin:0; font-weight:bold;">Total: R$ ${total.toFixed(2)}</p>
+          <p style="margin:0; font-size: 12px;">Data: ${new Date().toLocaleString('pt-BR')}</p>
+        </div>
+      `;
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('<html><head><title>Imprimir Fichas</title></head><body>');
+        printWindow.document.write(printContent);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+        }, 500);
+      }
+
+      setCart([]);
+    } catch (err) {
+      console.error('Error processing bar tokens:', err);
+      alert('Erro ao processar fichas. Tente novamente.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
-      {/* Quick Selection Grid */}
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-stone-100 p-6 overflow-y-auto">
         <h2 className="text-2xl font-bold font-display text-stone-900 mb-6">Venda Rápida</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -66,7 +122,6 @@ export default function BarTokens() {
         </div>
       </div>
 
-      {/* Transaction Sidebar */}
       <div className="w-full lg:w-96 bg-white rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h3 className="font-bold text-lg flex items-center gap-2">
@@ -140,10 +195,11 @@ export default function BarTokens() {
 
           <button
             onClick={handlePrint}
-            disabled={cart.length === 0}
-            className="w-full py-4 bg-orange-500 text-white rounded-xl font-bold text-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-orange-200 active:scale-95"
+            disabled={cart.length === 0 || isProcessing}
+            className="w-full py-4 bg-orange-500 text-white rounded-xl font-bold text-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-orange-200 active:scale-95 flex items-center justify-center gap-2"
           >
-            Imprimir Fichas
+            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+            {isProcessing ? 'Processando...' : 'Imprimir Fichas'}
           </button>
         </div>
       </div>

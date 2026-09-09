@@ -1,57 +1,144 @@
-import React, { useState } from 'react';
-import { Users, UserPlus, UserMinus, CreditCard, Banknote, QrCode, Settings, CheckCircle, History, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Users, UserPlus, UserMinus, CreditCard, Banknote, QrCode, Settings, CheckCircle, History, TrendingUp, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 
-type Transaction = {
+const CAPACITY = 250;
+
+interface Transaction {
   id: number;
-  type: 'entry' | 'exit';
+  type: string;
   amount: number;
   method: string;
-  timestamp: Date;
-};
+  timestamp: string;
+}
 
 export default function CoverCharge() {
-  const [count, setCount] = useState(142);
-  const [capacity] = useState(250);
+  const [count, setCount] = useState(0);
   const [price, setPrice] = useState(25.00);
   const [paymentMethod, setPaymentMethod] = useState<'credit' | 'debit' | 'cash' | 'pix'>('pix');
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
 
-  const handleCheckIn = () => {
-    if (count < capacity) {
+  const fetchData = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const [txResult, occResult] = await Promise.all([
+        supabase
+          .from('cover_charge_transactions')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(50),
+        supabase
+          .from('cover_charge_transactions')
+          .select('type, timestamp')
+          .gte('timestamp', today)
+      ]);
+
+      if (txResult.data) {
+        setTransactions(txResult.data.map((t: any) => ({
+          id: t.id,
+          type: t.type,
+          amount: t.amount,
+          method: t.method,
+          timestamp: t.timestamp
+        })));
+      }
+
+      if (occResult.data) {
+        let occupancy = 0;
+        occResult.data.forEach((t: any) => {
+          if (t.type === 'entry') occupancy++;
+          else if (t.type === 'exit') occupancy--;
+        });
+        setCount(Math.max(0, occupancy));
+      }
+    } catch (err) {
+      console.error('Error fetching cover charge data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleCheckIn = async () => {
+    if (count >= CAPACITY || processing) return;
+    setProcessing(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('cover_charge_transactions')
+        .insert({
+          type: 'entry',
+          amount: price,
+          method: paymentMethod,
+          timestamp: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
       setCount(c => c + 1);
-      const newTransaction: Transaction = {
-        id: Date.now(),
+      setTransactions(prev => [{
+        id: data.id,
         type: 'entry',
         amount: price,
         method: paymentMethod,
-        timestamp: new Date()
-      };
-      setTransactions(prev => [newTransaction, ...prev]);
+        timestamp: new Date().toISOString()
+      }, ...prev]);
       setLastAction(`Entrada registrada: R$ ${price.toFixed(2)} (${paymentMethod.toUpperCase()})`);
       setTimeout(() => setLastAction(null), 3000);
+    } catch (err) {
+      console.error('Error recording entry:', err);
+    } finally {
+      setProcessing(false);
     }
   };
 
-  const handleCheckOut = () => {
-    if (count > 0) {
-      setCount(c => c - 1);
-      const newTransaction: Transaction = {
-        id: Date.now(),
+  const handleCheckOut = async () => {
+    if (count <= 0 || processing) return;
+    setProcessing(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('cover_charge_transactions')
+        .insert({
+          type: 'exit',
+          amount: 0,
+          method: 'cash',
+          timestamp: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCount(c => Math.max(0, c - 1));
+      setTransactions(prev => [{
+        id: data.id,
         type: 'exit',
         amount: 0,
         method: '-',
-        timestamp: new Date()
-      };
-      setTransactions(prev => [newTransaction, ...prev]);
+        timestamp: new Date().toISOString()
+      }, ...prev]);
       setLastAction('Saída registrada');
       setTimeout(() => setLastAction(null), 3000);
+    } catch (err) {
+      console.error('Error recording exit:', err);
+    } finally {
+      setProcessing(false);
     }
   };
 
-  const occupancyPercentage = (count / capacity) * 100;
+  const occupancyPercentage = (count / CAPACITY) * 100;
   let statusColor = 'bg-emerald-500';
   if (occupancyPercentage > 70) statusColor = 'bg-orange-500';
   if (occupancyPercentage > 90) statusColor = 'bg-red-500';
@@ -60,11 +147,17 @@ export default function CoverCharge() {
     .filter(t => t.type === 'entry')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
-      {/* Main Control Panel */}
       <div className="flex-1 flex flex-col gap-6">
-        {/* Occupancy Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-8 flex flex-col items-center justify-center relative overflow-hidden flex-1 min-h-[300px]">
           <div className={`absolute top-0 left-0 w-full h-2 ${statusColor}`} />
           
@@ -95,14 +188,14 @@ export default function CoverCharge() {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-6xl font-bold font-display text-stone-900">{count}</span>
-              <span className="text-stone-400 font-medium">/ {capacity}</span>
+              <span className="text-stone-400 font-medium">/ {CAPACITY}</span>
             </div>
           </div>
 
           <div className="flex gap-8 text-center">
             <div>
               <p className="text-xs text-stone-400 uppercase font-bold">Disponível</p>
-              <p className="text-xl font-bold text-stone-700">{capacity - count}</p>
+              <p className="text-xl font-bold text-stone-700">{CAPACITY - count}</p>
             </div>
             <div>
               <p className="text-xs text-stone-400 uppercase font-bold">Ocupação</p>
@@ -113,28 +206,27 @@ export default function CoverCharge() {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-6 h-32">
           <button
             onClick={handleCheckOut}
-            className="bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 border-2 border-transparent hover:border-stone-300"
+            disabled={processing || count <= 0}
+            className="bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 border-2 border-transparent hover:border-stone-300 disabled:opacity-50"
           >
-            <UserMinus className="w-8 h-8" />
+            {processing ? <Loader2 className="w-8 h-8 animate-spin" /> : <UserMinus className="w-8 h-8" />}
             <span className="text-lg font-bold">Registrar Saída</span>
           </button>
           
           <button
             onClick={handleCheckIn}
-            disabled={count >= capacity}
+            disabled={count >= CAPACITY || processing}
             className="bg-stone-900 hover:bg-stone-800 text-white rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-stone-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <UserPlus className="w-8 h-8" />
+            {processing ? <Loader2 className="w-8 h-8 animate-spin" /> : <UserPlus className="w-8 h-8" />}
             <span className="text-lg font-bold">Registrar Entrada</span>
           </button>
         </div>
       </div>
 
-      {/* Settings & History Sidebar */}
       <div className="w-full lg:w-96 bg-white rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full overflow-hidden">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h3 className="font-bold text-lg flex items-center gap-2">
@@ -145,7 +237,6 @@ export default function CoverCharge() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-8">
-            {/* Price Setting */}
             <div>
               <label className="block text-sm font-medium text-stone-500 mb-2">Valor do Couvert</label>
               <div className="flex items-center gap-4">
@@ -167,7 +258,6 @@ export default function CoverCharge() {
               </div>
             </div>
 
-            {/* Payment Method */}
             <div>
               <label className="block text-sm font-medium text-stone-500 mb-2">Forma de Pagamento</label>
               <div className="grid grid-cols-2 gap-3">
@@ -194,7 +284,6 @@ export default function CoverCharge() {
               </div>
             </div>
 
-            {/* Transaction History */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <label className="block text-sm font-medium text-stone-500">Últimas Transações</label>
@@ -231,7 +320,7 @@ export default function CoverCharge() {
                       </div>
                       <div className="text-right">
                         <span className="block font-medium text-stone-900">
-                          {t.type === 'entry' ? `+ R$ ${t.amount.toFixed(2)}` : '-'}
+                          {t.type === 'entry' ? `+ R$ ${Number(t.amount).toFixed(2)}` : '-'}
                         </span>
                         <span className="text-xs text-stone-400 uppercase">{t.method}</span>
                       </div>

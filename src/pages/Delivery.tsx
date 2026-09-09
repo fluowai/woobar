@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { Search, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react';
-import { MENU_ITEMS, CATEGORIES } from '../data/menu';
+import { CATEGORIES } from '../hooks/useMenu';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useMenu } from '../hooks/useMenu';
+import type { MenuItem } from '../lib/database.types';
 
 export default function Delivery() {
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<{id: number, quantity: number}[]>([]);
+  const { items: menuItems, loading } = useMenu();
 
-  const filteredItems = MENU_ITEMS.filter(item => {
+  const filteredItems = menuItems.filter(item => {
     const matchesCategory = selectedCategory === 'Todos' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -42,9 +45,17 @@ export default function Delivery() {
   };
 
   const cartTotal = cart.reduce((total, cartItem) => {
-    const item = MENU_ITEMS.find(i => i.id === cartItem.id);
+    const item = menuItems.find(i => i.id === cartItem.id);
     return total + (item ? item.price * cartItem.quantity : 0);
   }, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <div className="text-stone-500">Carregando cardápio...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
@@ -142,7 +153,7 @@ export default function Delivery() {
               </div>
             ) : (
               cart.map(cartItem => {
-                const item = MENU_ITEMS.find(i => i.id === cartItem.id);
+                const item = menuItems.find(i => i.id === cartItem.id);
                 if (!item) return null;
                 return (
                   <motion.div 
