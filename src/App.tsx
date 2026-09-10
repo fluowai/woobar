@@ -21,6 +21,7 @@ const TableManager = lazy(() => import('./pages/TableManager'));
 const POS = lazy(() => import('./pages/POS'));
 const Validation = lazy(() => import('./pages/Validation'));
 const TenantsList = lazy(() => import('./pages/SuperAdmin/TenantsList'));
+const ResellersList = lazy(() => import('./pages/MegaAdmin/ResellersList'));
 const TableService = lazy(() => import('./pages/Waiter/TableService'));
 const Integrations = lazy(() => import('./pages/Settings/Integrations'));
 const PixTerminal = lazy(() => import('./pages/POS/PixTerminal'));
@@ -61,6 +62,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }>
           <Route index element={<Dashboard />} />
+          <Route path="resellers" element={<ResellersList />} />
           <Route path="tenants" element={<TenantsList />} />
           <Route path="waiter" element={<TableService />} />
           <Route path="pix-terminal" element={<PixTerminal />} />

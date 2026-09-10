@@ -15,6 +15,7 @@ import { cn } from '../lib/utils';
 
 const RoleBadge = ({ role }: { role: UserRole }) => {
   const styles: Record<string, string> = {
+    mega_admin: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     super_admin: 'bg-purple-100 text-purple-700 border-purple-200',
     tenant_admin: 'bg-blue-100 text-blue-700 border-blue-200',
     admin: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -26,6 +27,7 @@ const RoleBadge = ({ role }: { role: UserRole }) => {
   };
 
   const icons: Record<string, any> = {
+    mega_admin: Shield,
     super_admin: Shield,
     tenant_admin: Shield,
     admin: Shield,

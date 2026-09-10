@@ -1,7 +1,18 @@
-export type UserRole = 'super_admin' | 'tenant_admin' | 'waiter' | 'kitchen' | 'courier' | 'cashier' | 'manager';
+export type UserRole = 'mega_admin' | 'super_admin' | 'tenant_admin' | 'waiter' | 'kitchen' | 'courier' | 'cashier' | 'manager';
+
+export interface Reseller {
+  id: string;
+  name: string;
+  domain?: string;
+  logo?: string;
+  status: 'active' | 'suspended';
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface Tenant {
   id: string;
+  resellerId?: string; // Links to a Reseller
   name: string;
   slug: string;
   logo?: string;
@@ -37,7 +48,8 @@ export interface SupportTicket {
 
 export interface User {
   id: string;
-  tenantId?: string; // null for super_admin
+  tenantId?: string; // null for super_admin and mega_admin
+  resellerId?: string; // null for mega_admin, set for super_admin
   name: string;
   email: string;
   role: UserRole;

@@ -16,11 +16,11 @@ import {
   Store,
   ScanLine,
   LogOut,
-  User,
   MessageSquare,
   QrCode,
   CreditCard,
-  Headphones
+  Headphones,
+  Globe
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -49,8 +49,15 @@ export default function MainLayout() {
       ]
     },
     {
+      title: 'MEGA ADMIN',
+      roles: ['mega_admin'],
+      items: [
+        { path: '/resellers', label: 'Gestão de Revendas', icon: Globe }
+      ]
+    },
+    {
       title: 'SAAS ADMIN',
-      roles: ['super_admin'],
+      roles: ['mega_admin', 'super_admin'],
       items: [
         { path: '/tenants', label: 'Gestão de Restaurantes', icon: Store },
         { path: '/saas-users', label: 'Usuários SaaS', icon: Users },

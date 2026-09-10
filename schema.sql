@@ -1,9 +1,21 @@
 -- Extensions
 create extension if not exists "uuid-ossp";
 
+-- 0. Resellers (Revendas Whitelabel)
+create table if not exists public.resellers (
+  id uuid default uuid_generate_v4() primary key,
+  name text not null,
+  domain text unique,
+  logo text,
+  status text check (status in ('active', 'suspended')) default 'active',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- 1. Tenants (Restaurantes)
 create table if not exists public.tenants (
   id uuid default uuid_generate_v4() primary key,
+  reseller_id uuid references public.resellers(id) on delete set null,
   name text not null,
   slug text unique not null,
   logo text,
@@ -19,9 +31,10 @@ create table if not exists public.tenants (
 create table if not exists public.users (
   id uuid primary key references auth.users(id) on delete cascade,
   tenant_id uuid references public.tenants(id) on delete cascade,
+  reseller_id uuid references public.resellers(id) on delete cascade,
   name text not null,
   email text not null,
-  role text check (role in ('super_admin', 'tenant_admin', 'waiter', 'kitchen', 'courier', 'cashier', 'manager')) not null,
+  role text check (role in ('mega_admin', 'super_admin', 'tenant_admin', 'waiter', 'kitchen', 'courier', 'cashier', 'manager')) not null,
   status text check (status in ('active', 'inactive')) default 'active',
   avatar text,
   current_location jsonb,
@@ -85,6 +98,7 @@ create table if not exists public.sold_items (
 );
 
 -- Turn on RLS for isolation
+alter table public.resellers enable row level security;
 alter table public.tenants enable row level security;
 alter table public.users enable row level security;
 alter table public.payment_integrations enable row level security;
@@ -92,63 +106,107 @@ alter table public.support_tickets enable row level security;
 alter table public.menu_items enable row level security;
 alter table public.sold_items enable row level security;
 
--- Drop existing policies if they exist (to allow re-running script)
+-- Drop existing policies se existirem
+drop policy if exists "MegaAdmins view all resellers" on public.resellers;
+drop policy if exists "SuperAdmins view own reseller" on public.resellers;
+drop policy if exists "MegaAdmins view all tenants" on public.tenants;
+drop policy if exists "SuperAdmins view own tenants" on public.tenants;
 drop policy if exists "Tenants isolation" on public.tenants;
-drop policy if exists "SuperAdmins view all tenants" on public.tenants;
+drop policy if exists "MegaAdmins view all users" on public.users;
+drop policy if exists "SuperAdmins view own users" on public.users;
 drop policy if exists "Users tenant isolation" on public.users;
-drop policy if exists "SuperAdmins view all users" on public.users;
+drop policy if exists "MegaAdmins view all menu" on public.menu_items;
+drop policy if exists "SuperAdmins view own menu" on public.menu_items;
 drop policy if exists "Menu tenant isolation" on public.menu_items;
+drop policy if exists "MegaAdmins view all sold items" on public.sold_items;
+drop policy if exists "SuperAdmins view own sold items" on public.sold_items;
 drop policy if exists "SoldItems tenant isolation" on public.sold_items;
 
--- Super Admin can see EVERYTHING
-create policy "SuperAdmins view all tenants" on public.tenants for all 
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') );
+-- Resellers: MegaAdmin vê tudo, SuperAdmin vê a própria revenda
+create policy "MegaAdmins view all resellers" on public.resellers for all
+using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
 
-create policy "SuperAdmins view all users" on public.users for all 
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') );
+create policy "SuperAdmins view own reseller" on public.resellers for all
+using ( id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') );
 
--- Tenant users can only see their own Tenant and data
+-- Tenants: MegaAdmin vê tudo, SuperAdmin vê os tenants da sua revenda, TenantAdmin vê o seu próprio
+create policy "MegaAdmins view all tenants" on public.tenants for all
+using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+
+create policy "SuperAdmins view own tenants" on public.tenants for all
+using ( reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') );
+
 create policy "Tenants isolation" on public.tenants for all
 using ( id = (select tenant_id from public.users where id = auth.uid()) );
+
+-- Users: MegaAdmin vê tudo, SuperAdmin vê os usuários da sua revenda, TenantAdmin vê do seu próprio tenant
+create policy "MegaAdmins view all users" on public.users for all
+using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+
+create policy "SuperAdmins view own users" on public.users for all
+using ( reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') 
+   or tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
 
 create policy "Users tenant isolation" on public.users for all
 using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
 
+-- Menus:
+create policy "MegaAdmins view all menu" on public.menu_items for all
+using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+
+create policy "SuperAdmins view own menu" on public.menu_items for all
+using ( tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
+
 create policy "Menu tenant isolation" on public.menu_items for all
 using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+-- Sold Items:
+create policy "MegaAdmins view all sold items" on public.sold_items for all
+using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+
+create policy "SuperAdmins view own sold items" on public.sold_items for all
+using ( tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
 
 create policy "SoldItems tenant isolation" on public.sold_items for all
 using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
 
-
--- Insert Test Data (if empty)
+-- Test Data
 do $$
 declare
+  mega_admin_id uuid := '00000000-0000-0000-0000-000000000000';
   super_admin_id uuid := '00000000-0000-0000-0000-000000000001';
+  test_reseller_id uuid := '99999999-9999-9999-9999-999999999999';
   test_tenant_id uuid := '11111111-1111-1111-1111-111111111111';
   tenant_admin_id uuid := '22222222-2222-2222-2222-222222222222';
   waiter_id uuid := '33333333-3333-3333-3333-333333333333';
 begin
   
+  -- Create Reseller
+  insert into public.resellers (id, name, domain)
+  values (test_reseller_id, 'Reseller Principal', 'imob-admin.wootech.com.br')
+  on conflict (id) do nothing;
+
   -- Create Tenant
-  insert into public.tenants (id, name, slug, plan)
-  values (test_tenant_id, 'Restaurante Teste', 'teste', 'pro')
+  insert into public.tenants (id, reseller_id, name, slug, plan)
+  values (test_tenant_id, test_reseller_id, 'Restaurante Teste', 'teste', 'pro')
   on conflict (id) do nothing;
 
   -- Create Users in auth.users
   insert into auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, created_at, updated_at)
   values 
+  (mega_admin_id, '00000000-0000-0000-0000-000000000000', 'mega@wootech.com.br', crypt('123456', gen_salt('bf')), now(), now(), now()),
   (super_admin_id, '00000000-0000-0000-0000-000000000000', 'superadmin@woobar.com', crypt('123456', gen_salt('bf')), now(), now(), now()),
   (tenant_admin_id, '00000000-0000-0000-0000-000000000000', 'dono@bar.com', crypt('123456', gen_salt('bf')), now(), now(), now()),
   (waiter_id, '00000000-0000-0000-0000-000000000000', 'garcom@bar.com', crypt('123456', gen_salt('bf')), now(), now(), now())
   on conflict (id) do nothing;
   
   -- Insert them into public.users
-  insert into public.users (id, tenant_id, name, email, role)
+  insert into public.users (id, reseller_id, tenant_id, name, email, role)
   values
-  (super_admin_id, null, 'Super Administrador', 'superadmin@woobar.com', 'super_admin'),
-  (tenant_admin_id, test_tenant_id, 'Dono do Bar', 'dono@bar.com', 'tenant_admin'),
-  (waiter_id, test_tenant_id, 'Garçom Mobile', 'garcom@bar.com', 'waiter')
+  (mega_admin_id, null, null, 'Mega Admin Wootech', 'mega@wootech.com.br', 'mega_admin'),
+  (super_admin_id, test_reseller_id, null, 'Super Administrador (Reseller)', 'superadmin@woobar.com', 'super_admin'),
+  (tenant_admin_id, null, test_tenant_id, 'Dono do Bar', 'dono@bar.com', 'tenant_admin'),
+  (waiter_id, null, test_tenant_id, 'Garçom Mobile', 'garcom@bar.com', 'waiter')
   on conflict (id) do nothing;
 
   -- Insert some test menu items
@@ -159,3 +217,190 @@ begin
   on conflict do nothing;
 
 end $$;
+
+-- 7. Categories (por tenant)
+create table if not exists public.categories (
+  id bigint generated by default as identity primary key,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  name text not null,
+  display_order integer default 0,
+  unique (tenant_id, name)
+);
+
+-- 8. Orders (delivery)
+create table if not exists public.orders (
+  id text primary key,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  customer text not null,
+  customer_phone text,
+  items jsonb not null,
+  total decimal(10,2) not null,
+  status text check (status in ('pending', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled')) default 'pending',
+  time text,
+  address text,
+  location jsonb,
+  courier_id uuid references public.users(id) on delete set null,
+  payment_method text,
+  notes text,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now())
+);
+
+-- 9. Cover charge transactions
+create table if not exists public.cover_charge_transactions (
+  id bigint generated by default as identity primary key,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  type text check (type in ('entry', 'exit')) not null,
+  amount decimal(10,2) not null,
+  method text check (method in ('pix', 'credit', 'debit', 'cash')) not null,
+  timestamp timestamptz not null default timezone('utc'::text, now())
+);
+
+-- 10. Restaurant tables
+create table if not exists public.tables (
+  id integer not null,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  name text not null,
+  seats integer not null,
+  status text check (status in ('free', 'occupied', 'reserved', 'dirty')) default 'free',
+  orders jsonb,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now()),
+  primary key (tenant_id, id)
+);
+
+-- 11. Events
+create table if not exists public.events (
+  id bigint generated by default as identity primary key,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  title text not null,
+  date text not null,
+  time text not null,
+  location text,
+  image text,
+  tickets jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  updated_at timestamptz not null default timezone('utc'::text, now())
+);
+
+-- 12. Courier positions
+create table if not exists public.courier_positions (
+  courier_id uuid primary key references public.users(id) on delete cascade,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  lat numeric(10,6) not null,
+  lng numeric(10,6) not null,
+  timestamp timestamptz not null default timezone('utc'::text, now())
+);
+
+-- 13. Chat messages
+create table if not exists public.chat_messages (
+  id bigint generated by default as identity primary key,
+  tenant_id uuid references public.tenants(id) on delete cascade not null,
+  order_id text references public.orders(id) on delete cascade,
+  sender text check (sender in ('customer', 'system')) not null,
+  message text not null,
+  timestamp timestamptz not null default timezone('utc'::text, now())
+);
+
+-- Turn on RLS for feature tables
+alter table public.categories enable row level security;
+alter table public.orders enable row level security;
+alter table public.cover_charge_transactions enable row level security;
+alter table public.tables enable row level security;
+alter table public.events enable row level security;
+alter table public.courier_positions enable row level security;
+alter table public.chat_messages enable row level security;
+
+-- Drop existing policies if they exist (to allow re-running script)
+drop policy if exists "SuperAdmins manage categories" on public.categories;
+drop policy if exists "Categories tenant isolation" on public.categories;
+drop policy if exists "SuperAdmins manage orders" on public.orders;
+drop policy if exists "Orders tenant isolation" on public.orders;
+drop policy if exists "SuperAdmins manage cover charge" on public.cover_charge_transactions;
+drop policy if exists "Cover charge tenant isolation" on public.cover_charge_transactions;
+drop policy if exists "SuperAdmins manage tables" on public.tables;
+drop policy if exists "Tables tenant isolation" on public.tables;
+drop policy if exists "SuperAdmins manage events" on public.events;
+drop policy if exists "Events tenant isolation" on public.events;
+drop policy if exists "SuperAdmins manage courier positions" on public.courier_positions;
+drop policy if exists "Courier positions tenant isolation" on public.courier_positions;
+drop policy if exists "SuperAdmins manage chat messages" on public.chat_messages;
+drop policy if exists "Chat messages tenant isolation" on public.chat_messages;
+
+-- Feature tables: super_admin (global) + tenant-scoped access
+create policy "SuperAdmins manage categories" on public.categories for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Categories tenant isolation" on public.categories for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage orders" on public.orders for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Orders tenant isolation" on public.orders for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage cover charge" on public.cover_charge_transactions for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Cover charge tenant isolation" on public.cover_charge_transactions for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage tables" on public.tables for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Tables tenant isolation" on public.tables for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage events" on public.events for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Events tenant isolation" on public.events for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage courier positions" on public.courier_positions for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Courier positions tenant isolation" on public.courier_positions for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+create policy "SuperAdmins manage chat messages" on public.chat_messages for all
+  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+  with check ( true );
+
+create policy "Chat messages tenant isolation" on public.chat_messages for all
+  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
+  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+
+-- Indexes for feature tables
+create index if not exists idx_orders_tenant_status on public.orders(tenant_id, status);
+create index if not exists idx_orders_tenant_courier on public.orders(tenant_id, courier_id);
+create index if not exists idx_cover_charge_tenant_timestamp on public.cover_charge_transactions(tenant_id, timestamp);
+create index if not exists idx_events_tenant_date on public.events(tenant_id, date);
+create index if not exists idx_chat_messages_tenant_order on public.chat_messages(tenant_id, order_id);
+
+-- Seed categories and tables for the test tenant
+insert into public.categories (tenant_id, name, display_order)
+values
+  ('11111111-1111-1111-1111-111111111111', 'Burgers', 1),
+  ('11111111-1111-1111-1111-111111111111', 'Porções', 2),
+  ('11111111-1111-1111-1111-111111111111', 'Bebidas', 3),
+  ('11111111-1111-1111-1111-111111111111', 'Drinks', 4)
+on conflict (tenant_id, name) do nothing;
+
+insert into public.tables (id, tenant_id, name, seats, status)
+select g, '11111111-1111-1111-1111-111111111111', 'Mesa ' || g, case when g % 2 = 0 then 6 else 4 end, 'free'
+from generate_series(1, 16) as g
+on conflict (tenant_id, id) do nothing;
