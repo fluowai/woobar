@@ -299,11 +299,39 @@ export default function MainLayout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 bg-stone-50/50">
+      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 bg-stone-50/50 pb-20 md:pb-0">
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 z-30 pb-safe">
+        <div className="grid grid-cols-4 gap-1 px-2 py-2 max-w-md mx-auto">
+          {[
+            { path: '/', icon: LayoutDashboard, label: 'Home' },
+            { path: '/pos', icon: Store, label: 'PDV' },
+            { path: '/delivery', icon: Bike, label: 'Delivery' },
+            { path: '/waiter', icon: Armchair, label: 'Mesas' },
+          ].map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-col items-center justify-center py-2 rounded-xl transition-colors",
+                  isActive
+                    ? "text-orange-600 bg-orange-50"
+                    : "text-stone-500 hover:text-stone-900"
+                )
+              }
+            >
+              <item.icon className="w-5 h-5 mb-1" />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }

@@ -192,23 +192,25 @@ export default function POS() {
 
   const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
+  const [isCartOpen, setIsCartOpen] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-stone-50 overflow-hidden">
-      <div className="flex-1 flex flex-col p-6 gap-6">
-        <div className="flex justify-between items-center">
+    <div className="md:flex h-[calc(100vh-4rem)] bg-stone-50 overflow-hidden relative">
+      <div className="flex-1 flex flex-col p-3 md:p-6 gap-3 md:gap-6 pb-24 md:pb-0">
+        <div className="flex md:flex-row flex-col gap-4 justify-between items-start md:items-center">
           <div>
-            <h1 className="text-2xl font-bold font-display text-stone-900">Ponto de Venda</h1>
-            <p className="text-stone-500">Selecione os produtos para adicionar ao pedido</p>
+            <h1 className="text-xl md:text-2xl font-bold font-display text-stone-900">Ponto de Venda</h1>
+            <p className="text-stone-500 text-sm md:text-base">Selecione os produtos para adicionar ao pedido</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex md:flex-row flex-col w-full md:w-auto gap-3">
             <button 
               onClick={openHistory}
-              className="p-3 rounded-xl bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors shadow-sm"
+              className="p-3 rounded-xl bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors shadow-sm w-fit"
               title="Histórico de Vendas"
             >
               <History className="w-5 h-5" />
             </button>
-            <div className="relative w-80">
+            <div className="relative flex-1 md:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
               <input 
                 type="text" 
@@ -238,7 +240,7 @@ export default function POS() {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pb-20">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 overflow-y-auto pb-20 md:pb-0">
           {filteredProducts.map((product) => (
             <motion.button
               key={product.id}
@@ -246,7 +248,7 @@ export default function POS() {
               onClick={() => addToCart(product)}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-32"
+              className="bg-white p-3 md:p-4 rounded-2xl border border-stone-100 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-28 md:h-32"
             >
               <span className="font-bold text-stone-800 line-clamp-2">{product.name}</span>
               <div className="flex justify-between items-end">
@@ -262,7 +264,21 @@ export default function POS() {
         </div>
       </div>
 
-      <div className="w-96 bg-white border-l border-stone-200 flex flex-col shadow-xl z-20">
+      {/* Botão flutuante carrinho mobile */}
+      <button
+        onClick={() => setIsCartOpen(true)}
+        className="md:hidden fixed bottom-20 right-4 bg-orange-500 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-30"
+      >
+        <ShoppingCart className="w-6 h-6" />
+        {cart.length > 0 && (
+          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
+            {cart.reduce((acc, item) => acc + item.quantity, 0)}
+          </span>
+        )}
+      </button>
+
+      {/* Carrinho Desktop */}
+      <div className="hidden md:flex w-96 bg-white border-l border-stone-200 flex-col shadow-xl z-20">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h2 className="text-xl font-bold font-display flex items-center gap-2">
             <ShoppingCart className="w-5 h-5" />
@@ -335,6 +351,99 @@ export default function POS() {
           </button>
         </div>
       </div>
+
+      {/* Carrinho Mobile Modal */}
+      <AnimatePresence>
+        {isCartOpen && (
+          <motion.div className="md:hidden fixed inset-0 z-50 flex flex-col">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setIsCartOpen(false)} />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              className="relative bg-white mt-auto rounded-t-3xl h-[80vh] flex flex-col"
+            >
+              <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
+                <h2 className="text-xl font-bold font-display flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5" />
+                  Carrinho
+                </h2>
+                <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-stone-100 rounded-full">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {cart.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-stone-400 opacity-50">
+                    <ShoppingCart className="w-12 h-12 mb-2" />
+                    <p>Carrinho vazio</p>
+                  </div>
+                ) : (
+                  cart.map((item) => (
+                    <motion.div 
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="flex items-center gap-3 bg-stone-50 p-3 rounded-xl border border-stone-100"
+                    >
+                      <div className="flex-1">
+                        <h4 className="font-bold text-sm text-stone-800">{item.name}</h4>
+                        <p className="text-xs text-stone-500 font-mono">R$ {item.price.toFixed(2)}</p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 bg-white rounded-lg border border-stone-200 p-1">
+                        <button 
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="w-6 h-6 flex items-center justify-center hover:bg-stone-100 rounded"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-4 text-center text-sm font-bold">{item.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="w-6 h-6 flex items-center justify-center hover:bg-stone-100 rounded"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <button 
+                        onClick={() => removeFromCart(item.id)}
+                        className="text-red-400 hover:text-red-600 p-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+
+              <div className="p-6 bg-stone-50 border-t border-stone-200">
+                <div className="flex justify-between items-center mb-6">
+                  <span className="text-stone-500 font-medium">Total</span>
+                  <span className="text-3xl font-bold font-mono text-stone-900">
+                    R$ {total.toFixed(2)}
+                  </span>
+                </div>
+                
+                <button 
+                  disabled={cart.length === 0 || isProcessing}
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    setIsPaymentModalOpen(true);
+                  }}
+                  className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-stone-900/20 flex items-center justify-center gap-2"
+                >
+                  {isProcessing ? 'Processando...' : 'Finalizar Venda'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isPaymentModalOpen && (
