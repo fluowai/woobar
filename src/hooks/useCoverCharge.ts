@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 
 export interface CoverChargeTransaction {
   id?: number;
@@ -56,9 +57,11 @@ export function useCoverCharge() {
 
   const recordEntry = useCallback(async (amount: number, method: 'pix' | 'credit' | 'debit' | 'cash') => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('cover_charge_transactions')
         .insert({
+          tenant_id: tenantId,
           type: 'entry',
           amount,
           method,
@@ -79,9 +82,11 @@ export function useCoverCharge() {
 
   const recordExit = useCallback(async () => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('cover_charge_transactions')
         .insert({
+          tenant_id: tenantId,
           type: 'exit',
           amount: 0,
           method: 'cash',

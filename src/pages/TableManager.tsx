@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Coffee, CheckCircle, Clock, AlertCircle, DollarSign, X, Loader2 } from 'lucide-react';
+import { Users, Coffee, CheckCircle, Clock, AlertCircle, DollarSign, X, Loader2, Printer } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
+import { printReceipt } from '../lib/print';
 import type { Table, TableStatus } from '../lib/database.types';
 
 export default function TableManager() {
@@ -12,19 +14,23 @@ export default function TableManager() {
 
   const fetchTables = useCallback(async () => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('tables')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('id');
 
       if (error) throw error;
-      setTables((data || []).map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        seats: t.seats,
-        status: t.status,
-        orders: t.orders
-      })));
+setTables((data || []).map((t: any) => ({
+                  id: t.id,
+                  tenantId: t.tenant_id,
+                  name: t.name,
+                  seats: t.seats,
+                  status: t.status,
+                  orders: t.orders
+                })));
+
     } catch (err) {
       console.error('Error fetching tables:', err);
     } finally {
@@ -38,11 +44,12 @@ export default function TableManager() {
 
   const updateTableStatus = async (tableId: number, newStatus: TableStatus) => {
     try {
-      const updates: any = { 
+      const tenantId = await resolveTenantId();
+      const updates: any = {
         status: newStatus,
         updated_at: new Date().toISOString()
       };
-      
+
       if (newStatus === 'free') {
         updates.orders = null;
       }
@@ -50,9 +57,31 @@ export default function TableManager() {
       const { error } = await supabase
         .from('tables')
         .update(updates)
-        .eq('id', tableId);
+        .eq('id', tableId)
+        .eq('tenant_id', tenantId);
 
       if (error) throw error;
+
+      const table = tables.find(t => t.id === tableId);
+      if (newStatus === 'dirty' && table?.orders) {
+        const orders = Array.isArray(table.orders) ? table.orders : [];
+        const items = orders.map((o: any) => ({
+          name: o.itemName || o.name || 'Item',
+          quantity: o.quantity || 1,
+          price: o.price || 0,
+          total: (o.price || 0) * (o.quantity || 1)
+        }));
+        const total = items.reduce((acc, item) => acc + item.total, 0);
+
+        printReceipt({
+          title: table.name,
+          subtitle: 'Conta Fechada',
+          items,
+          total,
+          footer: 'Obrigado pela preferência!'
+        });
+      }
+
       setTables(prev => prev.map(t => t.id === tableId ? { ...t, ...updates, status: newStatus, orders: newStatus === 'free' ? undefined : t.orders } : t));
       setSelectedTable(null);
     } catch (err) {

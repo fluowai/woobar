@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { resolveTenantId } from './tenant';
 import type { SoldItem } from './database.types';
 
 export type { SoldItem };
@@ -25,9 +26,11 @@ const salesApi = {
   },
 
   async addItem(item: AddItemInput) {
+    const tenantId = item.tenantId || await resolveTenantId();
     const { data, error } = await supabase
       .from('sold_items')
       .insert({
+        tenant_id: tenantId,
         code: item.code,
         item_name: item.itemName,
         item_id: item.itemId || null,
@@ -75,7 +78,7 @@ const salesApi = {
       .from('sold_items')
       .update({ 
         status: 'used',
-        purchase_time: new Date().toISOString()
+        used_time: new Date().toISOString()
       })
       .eq('code', code)
       .eq('status', 'valid')

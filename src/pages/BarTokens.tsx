@@ -3,6 +3,7 @@ import { Beer, Wine, GlassWater, Coffee, Trash2, Printer, CreditCard, Banknote, 
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { SalesStore } from '../lib/store';
+import { printReceipt } from '../lib/print';
 
 const QUICK_ITEMS = [
   { id: 'beer', name: 'Cerveja', price: 12.00, icon: Beer, color: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -42,7 +43,7 @@ export default function BarTokens() {
 
     try {
       const codes: Array<{code: string; name: string; price: number}> = [];
-      
+
       for (const item of cart) {
         for (let i = 0; i < item.quantity; i++) {
           const code = await SalesStore.generateCode();
@@ -58,34 +59,15 @@ export default function BarTokens() {
 
       setGeneratedCodes(codes);
 
-      const printContent = `
-        <div style="font-family: monospace; text-align: center; width: 300px; padding: 20px;">
-          <h2 style="margin:0 0 10px 0;">WooBar - Fichas</h2>
-          <p style="margin:0; font-size: 12px;">Pagamento: ${paymentMethod.toUpperCase()}</p>
-          <p style="margin:5px 0;">------------------------</p>
-          ${codes.map(c => `
-            <div style="margin: 5px 0; text-align: left;">
-              <b>${c.name}</b> - R$ ${c.price.toFixed(2)}<br/>
-              Ficha: <span style="font-size: 16px;">${c.code}</span>
-            </div>
-          `).join('')}
-          <p style="margin:5px 0;">------------------------</p>
-          <p style="margin:0; font-weight:bold;">Total: R$ ${total.toFixed(2)}</p>
-          <p style="margin:0; font-size: 12px;">Data: ${new Date().toLocaleString('pt-BR')}</p>
-        </div>
-      `;
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write('<html><head><title>Imprimir Fichas</title></head><body>');
-        printWindow.document.write(printContent);
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 500);
-      }
+      printReceipt({
+        title: 'WooBar - Fichas',
+        items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price, total: item.price * item.quantity })),
+        total,
+        paymentMethod,
+        code: codes.map(c => c.code).join(', '),
+        codeLabel: 'FICHAS',
+        footer: 'Apresente no balcão'
+      });
 
       setCart([]);
     } catch (err) {

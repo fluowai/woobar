@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapPin, Phone, CheckCircle, Navigation, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 import { useAuth } from '../contexts/AuthContext';
 
 interface CourierOrder {
@@ -23,9 +24,11 @@ export default function CourierView() {
   const fetchMyOrders = useCallback(async () => {
     if (!user) return;
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('orders')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('courier_id', user.id)
         .in('status', ['delivering', 'ready'])
         .order('created_at', { ascending: false });
@@ -54,13 +57,15 @@ export default function CourierView() {
 
   const markDelivered = async (orderId: string) => {
     try {
+      const tenantId = await resolveTenantId();
       const { error } = await supabase
         .from('orders')
         .update({ 
           status: 'delivered',
           updated_at: new Date().toISOString()
         })
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .eq('tenant_id', tenantId);
 
       if (error) throw error;
       setOrders(prev => prev.filter(o => o.id !== orderId));

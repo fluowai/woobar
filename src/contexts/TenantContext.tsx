@@ -5,6 +5,7 @@ import type { Tenant } from '../lib/database.types';
 
 interface TenantContextType {
   tenant: Tenant | null;
+  tenantId: string | null;
   setTenant: (tenant: Tenant | null) => void;
   isLoading: boolean;
 }
@@ -56,7 +57,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <TenantContext.Provider value={{ tenant, setTenant, isLoading }}>
+    <TenantContext.Provider value={{ tenant, tenantId: tenant?.id || null, setTenant, isLoading }}>
       {children}
     </TenantContext.Provider>
   );

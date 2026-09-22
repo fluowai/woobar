@@ -12,6 +12,7 @@ import {
   ChefHat,
   Bike,
   Users,
+  User,
   Armchair,
   Store,
   ScanLine,

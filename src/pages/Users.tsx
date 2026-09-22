@@ -7,7 +7,11 @@ import {
   Shield, 
   Bike, 
   ChefHat, 
-  LayoutDashboard 
+  LayoutDashboard,
+  Mail,
+  X,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { useUsers } from '../hooks/useUsers';
 import type { UserRole } from '../lib/database.types';
@@ -52,11 +56,21 @@ const RoleBadge = ({ role }: { role: UserRole }) => {
 export default function UsersPage() {
   const { users, loading, updateUserStatus } = useUsers();
   const [searchQuery, setSearchQuery] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleCopyInvite = () => {
+    const baseUrl = `${window.location.origin}/login`;
+    navigator.clipboard?.writeText(`Crie sua conta Woobar e entre na equipe: ${baseUrl}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
 
   if (loading) {
     return (
@@ -73,7 +87,7 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold font-display text-stone-900">Gestão de Usuários</h1>
           <p className="text-stone-500">Gerencie acesso e funções da equipe</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-medium hover:bg-stone-800 transition-colors shadow-lg shadow-stone-200">
+        <button onClick={() => setInviteOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-medium hover:bg-stone-800 transition-colors shadow-lg shadow-stone-200">
           <Plus className="w-4 h-4" />
           Novo Usuário
         </button>
@@ -141,6 +155,34 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {inviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setInviteOpen(false)} />
+          <div className="relative bg-white rounded-3xl p-6 max-w-md w-full shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold font-display text-stone-900">Convidar novo usuário</h3>
+              <button onClick={() => setInviteOpen(false)} className="text-stone-400 hover:text-stone-900"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex items-start gap-3 bg-blue-50 text-blue-800 p-4 rounded-xl">
+              <Mail className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="text-sm">
+                A criação de conta (login e senha) é feita pelo <b>super admin</b> pelo painel <b>Usuários SaaS</b>. Envie o convite abaixo para a pessoa criar o acesso e depois ajuste a função aqui na equipe.
+              </p>
+            </div>
+            <div className="mt-4 bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm text-stone-600 font-mono break-all">
+              Crie sua conta Woobar e entre na equipe: {window.location.origin}/login
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setInviteOpen(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-stone-500 hover:bg-stone-100">Fechar</button>
+              <button onClick={handleCopyInvite} className="px-5 py-2 rounded-xl text-sm font-bold bg-stone-900 text-white hover:bg-stone-800 flex items-center gap-2">
+                {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copiado!' : 'Copiar convite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

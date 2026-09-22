@@ -3,7 +3,9 @@ import { Calendar, MapPin, Clock, Users, Ticket, Check, X, Loader2 } from 'lucid
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 import { SalesStore } from '../lib/store';
+import { printReceipt } from '../lib/print';
 
 interface EventTicket {
   id: string;
@@ -31,9 +33,11 @@ export default function Events() {
 
   const fetchEvents = useCallback(async () => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('events')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('date');
 
       if (error) throw error;
@@ -73,6 +77,8 @@ export default function Events() {
     setPurchasing(true);
 
     try {
+      const purchasedCodes: Array<{code: string; name: string; price: number}> = [];
+
       for (const ticket of selectedEvent.tickets) {
         const qty = ticketSelection[ticket.id] || 0;
         for (let i = 0; i < qty; i++) {
@@ -84,6 +90,7 @@ export default function Events() {
             price: ticket.price,
             type: 'ticket'
           });
+          purchasedCodes.push({ code, name: `${selectedEvent.title} - ${ticket.name}`, price: ticket.price });
         }
       }
 
@@ -92,14 +99,28 @@ export default function Events() {
         available: t.available - (ticketSelection[t.id] || 0)
       }));
 
+      const tenantId = await resolveTenantId();
       await supabase
         .from('events')
         .update({ tickets: updatedTickets })
-        .eq('id', selectedEvent.id);
+        .eq('id', selectedEvent.id)
+        .eq('tenant_id', tenantId);
 
       setTicketSelection({});
       setSelectedEvent(null);
       fetchEvents();
+
+      if (purchasedCodes.length > 0) {
+        printReceipt({
+          title: selectedEvent.title,
+          subtitle: 'Ingresso Eletrônico',
+          items: purchasedCodes.map(c => ({ name: c.name, quantity: 1, price: c.price, total: c.price })),
+          total: purchasedCodes.reduce((acc, c) => acc + c.price, 0),
+          code: purchasedCodes.map(c => c.code).join(', '),
+          codeLabel: 'CÓDIGO(S) DO INGRESSO',
+          footer: 'Apresente este código na entrada do evento'
+        });
+      }
     } catch (err) {
       console.error('Error purchasing tickets:', err);
       alert('Erro ao processar compra. Tente novamente.');

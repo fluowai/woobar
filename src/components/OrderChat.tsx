@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, User, Store } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 
 interface Message {
   id: string;
@@ -16,45 +18,114 @@ interface OrderChatProps {
   onClose: () => void;
 }
 
-const MOCK_MESSAGES: Record<string, Message[]> = {
-  '#2021': [
-    { id: '1', sender: 'customer', text: 'Olá, gostaria de saber se posso trocar o refrigerante?', timestamp: new Date(Date.now() - 1000 * 60 * 15) },
-    { id: '2', sender: 'store', text: 'Olá Ana! Claro, qual você prefere?', timestamp: new Date(Date.now() - 1000 * 60 * 14) },
-    { id: '3', sender: 'customer', text: 'Guaraná, por favor.', timestamp: new Date(Date.now() - 1000 * 60 * 12) },
-  ],
-  '#2018': [
-    { id: '1', sender: 'store', text: 'Seu pedido saiu para entrega!', timestamp: new Date(Date.now() - 1000 * 60 * 5) },
-    { id: '2', sender: 'customer', text: 'Ótimo, estou aguardando na portaria.', timestamp: new Date(Date.now() - 1000 * 60 * 2) },
-  ]
-};
-
 export default function OrderChat({ orderId, customerName, onClose }: OrderChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load mock messages or empty array
-    setMessages(MOCK_MESSAGES[orderId] || []);
+    let cancelled = false;
+
+    async function loadMessages() {
+      try {
+        const tenantId = await resolveTenantId();
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('order_id', orderId)
+          .order('timestamp', { ascending: true });
+
+        if (error || !data) {
+          setMessages([]);
+          return;
+        }
+
+        if (!cancelled) {
+          setMessages(data.map((m: any) => ({
+            id: String(m.id),
+            sender: m.sender as 'customer' | 'store',
+            text: m.message,
+            timestamp: new Date(m.timestamp)
+          })));
+        }
+      } catch {
+        if (!cancelled) setMessages([]);
+      }
+    }
+
+    loadMessages();
+
+    const channel = supabase
+      .channel(`chat-${orderId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `order_id=eq.${orderId}`
+      }, (payload) => {
+        const m = payload.new as any;
+        setMessages(prev => [...prev, {
+          id: String(m.id),
+          sender: m.sender as 'customer' | 'store',
+          text: m.message,
+          timestamp: new Date(m.timestamp)
+        }]);
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [orderId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!newMessage.trim()) return;
 
+    const text = newMessage.trim();
+    setNewMessage('');
+
+    const tempId = `temp-${Date.now()}`;
     const msg: Message = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: 'store',
-      text: newMessage,
+      text,
       timestamp: new Date()
     };
 
     setMessages(prev => [...prev, msg]);
-    setNewMessage('');
+
+    try {
+      const tenantId = await resolveTenantId();
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .insert({
+          tenant_id: tenantId,
+          order_id: orderId,
+          sender: 'store',
+          message: text,
+          timestamp: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          id: String(data.id),
+          sender: 'store',
+          text,
+          timestamp: new Date(data.timestamp)
+        } : m));
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+    }
   };
 
   return (

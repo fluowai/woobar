@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 import type { MenuItem } from '../lib/database.types';
 
 export const CATEGORIES = ['Todos', 'Burgers', 'Porções', 'Bebidas', 'Drinks'];
@@ -89,9 +90,11 @@ export function useMenu() {
 
   const createItem = useCallback(async (item: Omit<MenuItem, 'id'>) => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('menu_items')
         .insert({
+          tenant_id: tenantId,
           name: item.name,
           description: item.description,
           price: item.price,

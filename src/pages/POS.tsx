@@ -5,6 +5,9 @@ import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { useMenu } from '../hooks/useMenu';
 import { useAuth } from '../contexts/AuthContext';
+import { SalesStore } from '../lib/store';
+import { printReceipt, printTicketHTML } from '../lib/print';
+import { createPixCharge, checkPixStatus, type PixCharge } from '../lib/pixApi';
 import type { MenuItem } from '../lib/database.types';
 
 interface CartItem extends MenuItem {
@@ -23,6 +26,9 @@ export default function POS() {
   const [recentSales, setRecentSales] = useState<Array<any>>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [isPixQRModalOpen, setIsPixQRModalOpen] = useState(false);
+  const [pixCharge, setPixCharge] = useState<PixCharge | null>(null);
+  const [pollingPix, setPollingPix] = useState(false);
 
   const filteredProducts = menuItems.filter(p => 
     (category === 'all' || p.category === category) &&
@@ -54,55 +60,19 @@ export default function POS() {
     }
   }, []);
 
-  const generateUniqueCode = async (): Promise<string> => {
-    return Math.floor(10000 + Math.random() * 90000).toString();
-  };
-
-  const [isPixQRModalOpen, setIsPixQRModalOpen] = useState(false);
-
-  const printTicket = (codes: Array<{code: string; itemName: string}>) => {
-    const printContent = `
-      <div style="font-family: monospace; text-align: center; width: 300px; padding: 20px;">
-        <h2 style="margin:0 0 10px 0;">WooBar</h2>
-        <p style="margin:0; font-size: 12px;">Comprovante PIX</p>
-        <p style="margin:5px 0;">------------------------</p>
-        ${codes.map(c => `
-          <div style="margin: 5px 0; text-align: left;">
-            <b>${c.itemName}</b><br/>
-            Token: <span style="font-size: 16px;">${c.code}</span>
-          </div>
-        `).join('')}
-        <p style="margin:5px 0;">------------------------</p>
-        <p style="margin:0; font-size: 12px;">Data: ${new Date().toLocaleString()}</p>
-        <p style="font-size: 10px; margin-top: 15px;">Apresente no balcão</p>
-      </div>
-    `;
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write('<html><head><title>Imprimir Ticket</title></head><body>');
-      printWindow.document.write(printContent);
-      printWindow.document.write('</body></html>');
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
-    }
-  };
+  const { user } = useAuth();
 
   const handlePayment = async (method: 'card' | 'cash' | 'pix') => {
     if (method === 'pix') {
       setIsPaymentModalOpen(false);
       setIsPixQRModalOpen(true);
+      setPixCharge(null);
       return;
     }
-    await finalizeSale();
+    await finalizeSale(method);
   };
 
-  const { user } = useAuth();
-  
-  const finalizeSale = async () => {
+  const finalizeSale = async (method: 'card' | 'cash' | 'pix' = 'card') => {
     if (!user?.tenantId && user?.role !== 'super_admin') {
       alert('Erro: Restaurante não identificado.');
       return;
@@ -110,18 +80,17 @@ export default function POS() {
 
     setIsProcessing(true);
     const newCodes: Array<{code: string; itemName: string; price: number}> = [];
-    
+
     try {
-      // 1. Generate codes and prepare insert payload
       const payload = [];
       for (const item of cart) {
         for (let i = 0; i < item.quantity; i++) {
-          const code = await generateUniqueCode();
+          const code = await SalesStore.generateCode();
           newCodes.push({ code, itemName: item.name, price: item.price });
-          
+
           payload.push({
-            tenant_id: user.tenantId || '11111111-1111-1111-1111-111111111111', // default to test_tenant if super_admin for testing
-            code: code,
+            tenant_id: user?.tenantId || '11111111-1111-1111-1111-111111111111',
+            code,
             item_name: item.name,
             item_id: item.id,
             price: item.price,
@@ -131,7 +100,6 @@ export default function POS() {
         }
       }
 
-      // 2. Insert into Supabase
       const { error } = await supabase.from('sold_items').insert(payload);
       if (error) throw error;
 
@@ -140,15 +108,61 @@ export default function POS() {
       setIsPaymentModalOpen(false);
       setIsSuccessModalOpen(true);
       setCart([]);
-      
-      // Auto-print the ticket after success
-      setTimeout(() => printTicket(newCodes), 1000);
+
+      printReceipt({
+        title: 'WooBar - Venda',
+        items: newCodes.map(c => ({ name: c.itemName, quantity: 1, price: c.price, total: c.price })),
+        total,
+        paymentMethod: method === 'pix' ? 'pix' : method,
+        footer: 'Apresente no balcão'
+      });
     } catch (err) {
       console.error('Error processing payment:', err);
       alert('Erro ao processar venda. Tente novamente.');
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleCreatePixCharge = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const charge = await createPixCharge(total, `Venda POS - ${cart.reduce((acc, c) => acc + c.quantity, 0) || 1} itens`);
+      setPixCharge(charge);
+      setPollingPix(true);
+      pollPixStatus(charge.id, charge.provider);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao criar cobrança PIX. Verifique as integrações.');
+      setIsPixQRModalOpen(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const pollPixStatus = async (chargeId: string, provider: string) => {
+    const maxAttempts = 60;
+    let attempts = 0;
+
+    const interval = setInterval(async () => {
+      attempts++;
+      const status = await checkPixStatus(chargeId, provider);
+
+      if (status === 'approved') {
+        clearInterval(interval);
+        setPollingPix(false);
+        await finalizeSale('pix');
+      } else if (status === 'expired' || status === 'cancelled') {
+        clearInterval(interval);
+        setPollingPix(false);
+        setPixCharge(prev => prev ? { ...prev, status } : prev);
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        setPollingPix(false);
+      }
+    }, 3000);
   };
 
   const addToCart = (product: MenuItem) => {
@@ -377,7 +391,7 @@ export default function POS() {
       <AnimatePresence>
         {isPixQRModalOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -387,28 +401,45 @@ export default function POS() {
                 <h2 className="text-xl font-bold font-display text-teal-900 flex items-center gap-2">
                   <QrCode className="w-5 h-5" /> PIX Digital
                 </h2>
-                <button onClick={() => setIsPixQRModalOpen(false)} className="p-2 hover:bg-teal-100 rounded-full text-teal-900">
+                <button onClick={() => { setIsPixQRModalOpen(false); setPixCharge(null); setPollingPix(false); }} className="p-2 hover:bg-teal-100 rounded-full text-teal-900">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               <div className="p-8 flex flex-col items-center text-center">
                 <p className="text-stone-500 mb-4 font-bold uppercase text-xs tracking-wider">Valor da Cobrança</p>
                 <h2 className="text-4xl font-mono font-bold text-stone-900 mb-6 truncate">R$ {total.toFixed(2)}</h2>
-                
-                <div className="w-48 h-48 bg-stone-100 p-2 rounded-2xl shadow-sm border border-stone-200 mb-6 flex items-center justify-center">
-                  <QrCode className="w-32 h-32 text-stone-900" />
-                </div>
-                
-                <p className="text-sm text-stone-500 mb-6">Escaneie o código com o app do seu banco para pagar.</p>
-                
-                <button 
-                  onClick={finalizeSale}
-                  disabled={isProcessing}
-                  className="w-full bg-teal-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all hover:bg-teal-600"
-                >
-                  {isProcessing ? 'Aprovando...' : 'Simular Pagamento Aprovado'}
-                </button>
+
+                {pixCharge ? (
+                  <>
+                    <div className="w-48 h-48 bg-stone-100 p-2 rounded-2xl shadow-sm border border-stone-200 mb-3 flex items-center justify-center overflow-hidden">
+                      {pixCharge.qrCodeImage ? (
+                        <img src={pixCharge.qrCodeImage} alt="QR Code PIX" className="w-full h-full object-contain" />
+                      ) : (
+                        <QrCode className="w-24 h-24 text-stone-900" />
+                      )}
+                    </div>
+                    <p className="text-xs text-stone-500 mb-4 break-all px-2">{pixCharge.copyPaste}</p>
+                    {pollingPix && (
+                      <p className="text-xs text-teal-600 font-medium animate-pulse">Aguardando pagamento PIX...</p>
+                    )}
+                    <p className="text-[10px] text-stone-400 mb-4">Escaneie o código com o app do seu banco ou cole a chave acima.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-48 h-48 bg-stone-100 p-2 rounded-2xl shadow-sm border border-stone-200 mb-6 flex items-center justify-center">
+                      <QrCode className="w-32 h-32 text-stone-900" />
+                    </div>
+                    <p className="text-sm text-stone-500 mb-6">Clique para gerar a cobrança PIX.</p>
+                    <button
+                      onClick={handleCreatePixCharge}
+                      disabled={isProcessing}
+                      className="w-full bg-teal-500 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all hover:bg-teal-600"
+                    >
+                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Gerar Cobrança PIX'}
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>
@@ -446,14 +477,19 @@ export default function POS() {
                 </div>
 
                 <div className="flex gap-3">
-                  <button 
+                  <button
                     onClick={() => setIsSuccessModalOpen(false)}
                     className="flex-1 py-3 bg-stone-100 text-stone-600 rounded-xl font-bold hover:bg-stone-200 transition-colors"
                   >
                     Fechar
                   </button>
-                  <button 
-                    onClick={() => window.print()}
+                  <button
+                    onClick={() => printReceipt({
+                      title: 'WooBar - Venda',
+                      items: generatedCodes.map(c => ({ name: c.itemName, quantity: 1, price: c.price, total: c.price })),
+                      total: generatedCodes.reduce((acc, c) => acc + c.price, 0),
+                      footer: 'Apresente no balcão'
+                    })}
                     className="flex-1 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
                   >
                     <Printer className="w-4 h-4" />

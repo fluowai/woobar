@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { clearTenantIdCache } from '../lib/tenant';
 import type { User, UserRole } from '../lib/database.types';
 
 interface AuthUser {
@@ -8,6 +9,7 @@ interface AuthUser {
   role: UserRole;
   name: string;
   avatar?: string;
+  tenantId?: string;
 }
 
 interface AuthContextType {
@@ -32,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await loadUserProfile(session.user.id);
       } else {
         setUser(null);
+        clearTenantIdCache();
       }
       setLoading(false);
     });
@@ -70,7 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: data.email,
         role: data.role as UserRole,
         name: data.name,
-        avatar: data.avatar ?? undefined
+        avatar: data.avatar ?? undefined,
+        tenantId: data.tenant_id ?? undefined
       });
       return null;
     } catch (error) {
@@ -107,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await supabase.auth.signOut();
+    clearTenantIdCache();
     setUser(null);
   }
 

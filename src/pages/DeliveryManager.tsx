@@ -24,6 +24,7 @@ import DeliveryMap from '../components/DeliveryMap';
 import GoogleDeliveryMap from '../components/GoogleDeliveryMap';
 import OrderChat from '../components/OrderChat';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 import { useUsers } from '../hooks/useUsers';
 import { autoDispatch, getDistanceFromLatLonInKm } from '../lib/dispatchSystem';
 import type { User } from '../data/users';
@@ -286,9 +287,11 @@ export default function DeliveryManager() {
 
   const fetchOrders = useCallback(async () => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('orders')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -345,6 +348,7 @@ export default function DeliveryManager() {
       const assignments = autoDispatch(orders, couriers);
       if (assignments.length > 0) {
         const updateOrders = async () => {
+          const tenantId = await resolveTenantId();
           for (const assignment of assignments) {
             try {
               const { error } = await supabase
@@ -354,7 +358,8 @@ export default function DeliveryManager() {
                   status: 'delivering',
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', assignment.orderId);
+                .eq('id', assignment.orderId)
+                .eq('tenant_id', tenantId);
 
               if (error) throw error;
             } catch (err) {
@@ -384,21 +389,17 @@ export default function DeliveryManager() {
 
   const moveStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
+      const tenantId = await resolveTenantId();
       const updates: any = { 
         status: newStatus,
         updated_at: new Date().toISOString()
       };
-      
-      if (newStatus === 'delivering') {
-        updates.delivered_at = null;
-      } else if (newStatus === 'delivered') {
-        updates.delivered_at = new Date().toISOString();
-      }
 
       const { error } = await supabase
         .from('orders')
         .update(updates)
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .eq('tenant_id', tenantId);
 
       if (error) throw error;
       setOrders(prev => prev.map(order => 
@@ -409,10 +410,22 @@ export default function DeliveryManager() {
     }
   };
 
-  const toggleCourierAvailability = (courierId: string) => {
-    setCouriers(prev => prev.map(c => 
-      c.id === courierId ? { ...c, isAvailable: !c.isAvailable } : c
-    ));
+  const toggleCourierAvailability = async (courierId: string) => {
+    try {
+      const courier = couriers.find(c => c.id === courierId);
+      if (!courier) return;
+      const { error } = await supabase
+        .from('users')
+        .update({ is_available: !courier.isAvailable, updated_at: new Date().toISOString() })
+        .eq('id', courierId);
+      if (error) throw error;
+      setCouriers(prev => prev.map(c => 
+        c.id === courierId ? { ...c, isAvailable: !c.isAvailable } : c
+      ));
+    } catch (err) {
+      console.error('Error toggling courier availability:', err);
+      alert('Erro ao alterar disponibilidade do entregador.');
+    }
   };
 
   const handleChatClick = (orderId: string) => {

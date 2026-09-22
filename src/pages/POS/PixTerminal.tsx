@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { QrCode, CreditCard, Delete, DollarSign, Smartphone, CheckCircle2, XCircle } from 'lucide-react';
+import { QrCode, CreditCard, Delete, DollarSign, Smartphone, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { createPixCharge, checkPixStatus, type PixCharge } from '../../lib/pixApi';
 
 export default function PixTerminal() {
   const [amount, setAmount] = useState('0');
   const [step, setStep] = useState<'input' | 'method' | 'processing' | 'qrcode' | 'success' | 'error'>('input');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'debit' | null>(null);
+  const [pixCharge, setPixCharge] = useState<PixCharge | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [pollInterval, setPollIntervalState] = useState<number | null>(null);
 
   const displayAmount = (parseInt(amount) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  useEffect(() => {
+    return () => {
+      if (pollInterval) window.clearInterval(pollInterval);
+    };
+  }, [pollInterval]);
 
   const handleKeyPress = (key: string) => {
     if (key === 'clear') {
@@ -21,23 +31,44 @@ export default function PixTerminal() {
     setAmount(prev => (prev === '0' ? key : prev + key));
   };
 
-  const processPayment = () => {
-    setStep('processing');
-    
-    // Simula comunicação com gateway (Asaas, MercadoPago, etc)
-    setTimeout(() => {
-      setStep('qrcode');
-    }, 1500);
-  };
+  const processPayment = async () => {
+    const value = parseInt(amount);
+    if (value <= 0) return;
 
-  const finishPayment = () => {
-    setStep('success');
-    printTicket();
+    setStep('processing');
+    setPixCharge(null);
+
+    try {
+      const charge = await createPixCharge(value / 100, `Cobrança terminal - ${displayAmount}`);
+      setPixCharge(charge);
+      setStep('qrcode');
+      setPolling(true);
+
+      const interval = window.setInterval(async () => {
+        const status = await checkPixStatus(charge.id, charge.provider);
+        if (status === 'approved') {
+          window.clearInterval(interval);
+          setPolling(false);
+          setPollIntervalState(null);
+          setStep('success');
+          printTicket();
+        } else if (status === 'expired' || status === 'cancelled') {
+          window.clearInterval(interval);
+          setPolling(false);
+          setPollIntervalState(null);
+          setStep('error');
+        }
+      }, 3000);
+
+      setPollIntervalState(interval);
+    } catch (err: any) {
+      console.error('PIX error:', err);
+      setStep('error');
+    }
   };
 
   const printTicket = () => {
-    // Para Smart POS (Android), o window.print() aciona a bobina térmica integrada
-    // ou abre a tela de impressão do sistema.
+    const value = parseInt(amount) / 100;
     const printContent = `
       <div style="font-family: monospace; text-align: center; width: 300px; padding: 20px;">
         <h2 style="margin:0 0 10px 0;">WooBar</h2>
@@ -49,7 +80,7 @@ export default function PixTerminal() {
         <p style="font-size: 10px; margin-top: 15px;">Obrigado pela preferência!</p>
       </div>
     `;
-    
+
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write('<html><head><title>Imprimir Ticket</title></head><body>');
@@ -57,8 +88,7 @@ export default function PixTerminal() {
       printWindow.document.write('</body></html>');
       printWindow.document.close();
       printWindow.focus();
-      
-      // Auto-print after render
+
       setTimeout(() => {
         printWindow.print();
         printWindow.close();
@@ -69,6 +99,8 @@ export default function PixTerminal() {
   const resetTerminal = () => {
     setAmount('0');
     setStep('input');
+    setPixCharge(null);
+    setPolling(false);
   };
 
   return (
@@ -118,14 +150,20 @@ export default function PixTerminal() {
             {step === 'qrcode' && (
               <motion.div key="qrcode" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center w-full">
                 <p className="text-teal-600 font-bold text-sm mb-2">Escaneie para pagar</p>
-                {/* Fake QR Code */}
-                <div className="w-32 h-32 bg-white p-2 rounded-xl shadow-sm border border-stone-200 mb-3 flex items-center justify-center">
-                  <QrCode className="w-24 h-24 text-stone-900" />
-                </div>
-                <p className="font-mono font-bold text-stone-900 text-lg mb-2">{displayAmount}</p>
-                <button onClick={finishPayment} className="w-full bg-teal-500 text-white font-bold py-2 rounded-lg text-sm hover:bg-teal-600">
-                  Simular Pagamento OK
-                </button>
+                {pixCharge?.qrCodeImage ? (
+                  <img src={pixCharge.qrCodeImage} alt="QR Code PIX" className="w-32 h-32 object-contain mb-3 rounded-xl border border-stone-200" />
+                ) : (
+                  <div className="w-32 h-32 bg-white p-2 rounded-xl shadow-sm border border-stone-200 mb-3 flex items-center justify-center">
+                    <QrCode className="w-24 h-24 text-stone-900" />
+                  </div>
+                )}
+                <p className="font-mono font-bold text-stone-900 text-lg mb-1">{displayAmount}</p>
+                {pixCharge?.copyPaste && (
+                  <p className="text-[10px] text-stone-500 mb-3 break-all px-2">{pixCharge.copyPaste}</p>
+                )}
+                {polling && (
+                  <p className="text-xs text-teal-600 font-medium animate-pulse">Aguardando pagamento...</p>
+                )}
               </motion.div>
             )}
 
@@ -138,6 +176,19 @@ export default function PixTerminal() {
                 <p className="text-stone-500 font-mono text-sm mb-6">{displayAmount}</p>
                 <button onClick={resetTerminal} className="bg-stone-900 text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-stone-800">
                   Nova Venda
+                </button>
+              </motion.div>
+            )}
+
+            {step === 'error' && (
+              <motion.div key="error" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+                  <XCircle className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-stone-900 mb-1">Erro</h3>
+                <p className="text-stone-500 text-sm mb-6">Não foi possível gerar a cobrança PIX.</p>
+                <button onClick={resetTerminal} className="bg-stone-900 text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-stone-800">
+                  Tentar Novamente
                 </button>
               </motion.div>
             )}

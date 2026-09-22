@@ -3,6 +3,7 @@ import { Users, UserPlus, UserMinus, CreditCard, Banknote, QrCode, Settings, Che
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 
 const CAPACITY = 250;
 
@@ -73,9 +74,11 @@ export default function CoverCharge() {
     setProcessing(true);
 
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('cover_charge_transactions')
         .insert({
+          tenant_id: tenantId,
           type: 'entry',
           amount: price,
           method: paymentMethod,
@@ -108,9 +111,11 @@ export default function CoverCharge() {
     setProcessing(true);
 
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('cover_charge_transactions')
         .insert({
+          tenant_id: tenantId,
           type: 'exit',
           amount: 0,
           method: 'cash',

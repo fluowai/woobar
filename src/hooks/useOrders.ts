@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered' | 'cancelled';
 
@@ -68,12 +69,23 @@ export function useOrders() {
 
   const createOrder = useCallback(async (order: Omit<Order, 'id' | 'status' | 'time' | 'createdAt'>) => {
     try {
+      const tenantId = await resolveTenantId();
       const { data, error } = await supabase
         .from('orders')
         .insert({
-          ...order,
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          customer: order.customer,
+          customer_phone: order.customerPhone || null,
+          items: order.items,
+          total: order.total,
           status: 'pending',
-          time: new Date().toISOString()
+          time: new Date().toISOString(),
+          address: order.address || null,
+          location: order.location || null,
+          courier_id: order.courierId || null,
+          payment_method: order.paymentMethod || null,
+          notes: order.notes || null
         })
         .select()
         .single();
@@ -93,7 +105,7 @@ export function useOrders() {
         .from('orders')
         .update({ 
           status,
-          updatedAt: new Date().toISOString()
+          updated_at: new Date().toISOString()
         })
         .eq('id', orderId)
         .select()
@@ -113,8 +125,8 @@ export function useOrders() {
       const { data, error } = await supabase
         .from('orders')
         .update({ 
-          courierId,
-          updatedAt: new Date().toISOString()
+          courier_id: courierId,
+          updated_at: new Date().toISOString()
         })
         .eq('id', orderId)
         .select()
@@ -131,9 +143,22 @@ export function useOrders() {
 
   const updateOrder = useCallback(async (orderId: string, updates: Partial<Order>) => {
     try {
+      const dbUpdates: any = {};
+      if (updates.customer !== undefined) dbUpdates.customer = updates.customer;
+      if (updates.customerPhone !== undefined) dbUpdates.customer_phone = updates.customerPhone;
+      if (updates.address !== undefined) dbUpdates.address = updates.address;
+      if (updates.location !== undefined) dbUpdates.location = updates.location;
+      if (updates.courierId !== undefined) dbUpdates.courier_id = updates.courierId;
+      if (updates.paymentMethod !== undefined) dbUpdates.payment_method = updates.paymentMethod;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+      if (updates.total !== undefined) dbUpdates.total = updates.total;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.items !== undefined) dbUpdates.items = updates.items;
+      dbUpdates.updated_at = new Date().toISOString();
+
       const { data, error } = await supabase
         .from('orders')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', orderId)
         .select()
         .single();

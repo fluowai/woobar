@@ -1,4 +1,4 @@
-export type UserRole = 'mega_admin' | 'super_admin' | 'tenant_admin' | 'waiter' | 'kitchen' | 'courier' | 'cashier' | 'manager';
+export type UserRole = 'mega_admin' | 'super_admin' | 'tenant_admin' | 'waiter' | 'kitchen' | 'courier' | 'cashier' | 'manager' | 'admin';
 
 export interface Reseller {
   id: string;
@@ -70,8 +70,28 @@ export interface MenuItem {
   category: string;
   image: string;
   isAvailable: boolean;
+  variations?: MenuVariation[];
+  addons?: MenuAddon[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface MenuVariation {
+  id: string;
+  menuItemId: number;
+  tenantId: string;
+  name: string;
+  priceAdjust: number;
+  isAvailable: boolean;
+}
+
+export interface MenuAddon {
+  id: string;
+  menuItemId: number;
+  tenantId: string;
+  name: string;
+  price: number;
+  isAvailable: boolean;
 }
 
 export interface Category {
@@ -103,6 +123,10 @@ export interface Order {
   items: OrderItem[];
   total: number;
   status: OrderStatus;
+  kitchenStation: 'general' | 'kitchen' | 'bar' | 'grill' | 'pizza' | 'dessert';
+  priority: number;
+  tableId?: number;
+  splitFrom?: string;
   time: string;
   address: string;
   location?: { lat: number; lng: number };
@@ -118,6 +142,8 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  variationId?: string;
+  addonIds?: string[];
 }
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered' | 'cancelled';

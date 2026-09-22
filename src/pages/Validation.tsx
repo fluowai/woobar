@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { QrCode, Ticket, CheckCircle, XCircle, Search, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { SalesStore } from '../lib/store';
+import { printTicketHTML } from '../lib/print';
 
 type ValidationType = 'token' | 'ticket';
 
@@ -129,14 +130,12 @@ export default function Validation() {
               autoFocus
             />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-6 h-6" />
-            {activeTab === 'token' && (
-              <button
-                type="submit"
-                className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors shadow-md"
-              >
-                Validar Ficha
-              </button>
-            )}
+            <button
+              type="submit"
+              className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors shadow-md"
+            >
+              {activeTab === 'token' ? 'Validar Ficha' : 'Validar Ingresso'}
+            </button>
           </form>
 
           <AnimatePresence mode="wait">

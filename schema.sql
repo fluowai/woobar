@@ -1,6 +1,44 @@
 -- Extensions
 create extension if not exists "uuid-ossp";
 
+-- Helper functions (SECURITY DEFINER) to avoid RLS recursion on public.users
+create or replace function public.auth_role() returns text
+language sql stable security definer
+set search_path = public
+as $$ select role from public.users where id = auth.uid() $$;
+
+create or replace function public.is_mega_admin() returns boolean
+language sql stable security definer
+set search_path = public
+as $$ select public.auth_role() = 'mega_admin' $$;
+
+create or replace function public.is_super_admin() returns boolean
+language sql stable security definer
+set search_path = public
+as $$ select public.auth_role() = 'super_admin' $$;
+
+create or replace function public.is_saas_admin() returns boolean
+language sql stable security definer
+set search_path = public
+as $$ select public.auth_role() in ('mega_admin', 'super_admin') $$;
+
+create or replace function public.current_tenant_id() returns uuid
+language sql stable security definer
+set search_path = public
+as $$ select tenant_id from public.users where id = auth.uid() $$;
+
+create or replace function public.current_reseller_id() returns uuid
+language sql stable security definer
+set search_path = public
+as $$ select reseller_id from public.users where id = auth.uid() and role = 'super_admin' $$;
+
+grant execute on function public.auth_role() to anon, authenticated;
+grant execute on function public.is_mega_admin() to anon, authenticated;
+grant execute on function public.is_super_admin() to anon, authenticated;
+grant execute on function public.is_saas_admin() to anon, authenticated;
+grant execute on function public.current_tenant_id() to anon, authenticated;
+grant execute on function public.current_reseller_id() to anon, authenticated;
+
 -- 0. Resellers (Revendas Whitelabel)
 create table if not exists public.resellers (
   id uuid default uuid_generate_v4() primary key,
@@ -124,51 +162,51 @@ drop policy if exists "SoldItems tenant isolation" on public.sold_items;
 
 -- Resellers: MegaAdmin vê tudo, SuperAdmin vê a própria revenda
 create policy "MegaAdmins view all resellers" on public.resellers for all
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+using ( public.is_mega_admin() );
 
 create policy "SuperAdmins view own reseller" on public.resellers for all
-using ( id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') );
+using ( id = public.current_reseller_id() );
 
 -- Tenants: MegaAdmin vê tudo, SuperAdmin vê os tenants da sua revenda, TenantAdmin vê o seu próprio
 create policy "MegaAdmins view all tenants" on public.tenants for all
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+using ( public.is_mega_admin() );
 
 create policy "SuperAdmins view own tenants" on public.tenants for all
-using ( reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') );
+using ( reseller_id = public.current_reseller_id() );
 
 create policy "Tenants isolation" on public.tenants for all
-using ( id = (select tenant_id from public.users where id = auth.uid()) );
+using ( id = public.current_tenant_id() );
 
 -- Users: MegaAdmin vê tudo, SuperAdmin vê os usuários da sua revenda, TenantAdmin vê do seu próprio tenant
 create policy "MegaAdmins view all users" on public.users for all
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+using ( public.is_mega_admin() );
 
 create policy "SuperAdmins view own users" on public.users for all
-using ( reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin') 
-   or tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
+using ( reseller_id = public.current_reseller_id() 
+   or tenant_id in (select id from public.tenants where reseller_id = public.current_reseller_id()) );
 
 create policy "Users tenant isolation" on public.users for all
-using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+using ( tenant_id = public.current_tenant_id() );
 
 -- Menus:
 create policy "MegaAdmins view all menu" on public.menu_items for all
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+using ( public.is_mega_admin() );
 
 create policy "SuperAdmins view own menu" on public.menu_items for all
-using ( tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
+using ( tenant_id in (select id from public.tenants where reseller_id = public.current_reseller_id()) );
 
 create policy "Menu tenant isolation" on public.menu_items for all
-using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+using ( tenant_id = public.current_tenant_id() );
 
 -- Sold Items:
 create policy "MegaAdmins view all sold items" on public.sold_items for all
-using ( exists (select 1 from public.users where id = auth.uid() and role = 'mega_admin') );
+using ( public.is_mega_admin() );
 
 create policy "SuperAdmins view own sold items" on public.sold_items for all
-using ( tenant_id in (select id from public.tenants where reseller_id = (select reseller_id from public.users where id = auth.uid() and role = 'super_admin')) );
+using ( tenant_id in (select id from public.tenants where reseller_id = public.current_reseller_id()) );
 
 create policy "SoldItems tenant isolation" on public.sold_items for all
-using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+using ( tenant_id = public.current_tenant_id() );
 
 -- Test Data
 do $$
@@ -180,7 +218,12 @@ declare
   tenant_admin_id uuid := '22222222-2222-2222-2222-222222222222';
   waiter_id uuid := '33333333-3333-3333-3333-333333333333';
 begin
-  
+  -- Seed test data only on a fresh database
+  if exists (select 1 from auth.users) then
+    raise notice 'auth.users already populated; skipping seed data';
+    return;
+  end if;
+
   -- Create Reseller
   insert into public.resellers (id, name, domain)
   values (test_reseller_id, 'Reseller Principal', 'imob-admin.wootech.com.br')
@@ -313,76 +356,104 @@ alter table public.chat_messages enable row level security;
 
 -- Drop existing policies if they exist (to allow re-running script)
 drop policy if exists "SuperAdmins manage categories" on public.categories;
+drop policy if exists "SaaS admins manage categories" on public.categories;
 drop policy if exists "Categories tenant isolation" on public.categories;
 drop policy if exists "SuperAdmins manage orders" on public.orders;
+drop policy if exists "SaaS admins manage orders" on public.orders;
 drop policy if exists "Orders tenant isolation" on public.orders;
 drop policy if exists "SuperAdmins manage cover charge" on public.cover_charge_transactions;
+drop policy if exists "SaaS admins manage cover charge" on public.cover_charge_transactions;
 drop policy if exists "Cover charge tenant isolation" on public.cover_charge_transactions;
 drop policy if exists "SuperAdmins manage tables" on public.tables;
+drop policy if exists "SaaS admins manage tables" on public.tables;
 drop policy if exists "Tables tenant isolation" on public.tables;
 drop policy if exists "SuperAdmins manage events" on public.events;
+drop policy if exists "SaaS admins manage events" on public.events;
 drop policy if exists "Events tenant isolation" on public.events;
 drop policy if exists "SuperAdmins manage courier positions" on public.courier_positions;
+drop policy if exists "SaaS admins manage courier positions" on public.courier_positions;
 drop policy if exists "Courier positions tenant isolation" on public.courier_positions;
 drop policy if exists "SuperAdmins manage chat messages" on public.chat_messages;
+drop policy if exists "SaaS admins manage chat messages" on public.chat_messages;
 drop policy if exists "Chat messages tenant isolation" on public.chat_messages;
 
--- Feature tables: super_admin (global) + tenant-scoped access
-create policy "SuperAdmins manage categories" on public.categories for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+-- Feature tables: SaaS admins (mega_admin + super_admin) + tenant-scoped access
+create policy "SaaS admins manage categories" on public.categories for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Categories tenant isolation" on public.categories for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage orders" on public.orders for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage orders" on public.orders for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Orders tenant isolation" on public.orders for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage cover charge" on public.cover_charge_transactions for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage cover charge" on public.cover_charge_transactions for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Cover charge tenant isolation" on public.cover_charge_transactions for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage tables" on public.tables for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage tables" on public.tables for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Tables tenant isolation" on public.tables for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage events" on public.events for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage events" on public.events for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Events tenant isolation" on public.events for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage courier positions" on public.courier_positions for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage courier positions" on public.courier_positions for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Courier positions tenant isolation" on public.courier_positions for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
 
-create policy "SuperAdmins manage chat messages" on public.chat_messages for all
-  using ( exists (select 1 from public.users where id = auth.uid() and role = 'super_admin') )
+create policy "SaaS admins manage chat messages" on public.chat_messages for all
+  using ( public.is_saas_admin() )
   with check ( true );
 
 create policy "Chat messages tenant isolation" on public.chat_messages for all
-  using ( tenant_id = (select tenant_id from public.users where id = auth.uid()) )
-  with check ( tenant_id = (select tenant_id from public.users where id = auth.uid()) );
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
+
+-- payment_integrations and support_tickets: SaaS admins + tenant isolation
+drop policy if exists "Payment integrations tenant isolation" on public.payment_integrations;
+drop policy if exists "SaaS admins manage payment integrations" on public.payment_integrations;
+create policy "Payment integrations tenant isolation" on public.payment_integrations for all
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
+
+create policy "SaaS admins manage payment integrations" on public.payment_integrations for all
+  using ( public.is_saas_admin() )
+  with check ( true );
+
+drop policy if exists "Support tickets tenant isolation" on public.support_tickets;
+drop policy if exists "SaaS admins manage support tickets" on public.support_tickets;
+create policy "Support tickets tenant isolation" on public.support_tickets for all
+  using ( tenant_id = public.current_tenant_id() )
+  with check ( tenant_id = public.current_tenant_id() );
+
+create policy "SaaS admins manage support tickets" on public.support_tickets for all
+  using ( public.is_saas_admin() )
+  with check ( true );
 
 -- Indexes for feature tables
 create index if not exists idx_orders_tenant_status on public.orders(tenant_id, status);

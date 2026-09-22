@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { resolveTenantId } from './tenant';
 import type { 
   User, 
   MenuItem, 
@@ -69,7 +70,7 @@ export const userApi = {
   async updateLocation(id: string, location: { lat: number; lng: number }) {
     const { data, error } = await supabase
       .from('users')
-      .update({ currentLocation: location })
+      .update({ current_location: location })
       .eq('id', id)
       .select()
       .single();
@@ -110,9 +111,18 @@ export const menuApi = {
   },
 
   async create(item: Partial<MenuItem>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('menu_items')
-      .insert(item)
+      .insert({
+        tenant_id: item.tenantId || tenantId,
+        name: item.name ?? '',
+        description: item.description ?? null,
+        price: item.price ?? 0,
+        category: item.category ?? 'Outros',
+        image: item.image ?? null,
+        is_available: item.isAvailable ?? true
+      })
       .select()
       .single();
     if (error) throw error;
@@ -120,9 +130,17 @@ export const menuApi = {
   },
 
   async update(id: number, updates: Partial<MenuItem>) {
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.price !== undefined) dbUpdates.price = updates.price;
+    if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.image !== undefined) dbUpdates.image = updates.image;
+    if (updates.isAvailable !== undefined) dbUpdates.is_available = updates.isAvailable;
+
     const { data, error } = await supabase
       .from('menu_items')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
       .select()
       .single();
@@ -142,12 +160,18 @@ export const salesApi = {
   },
 
   async addItem(item: Omit<SoldItem, 'id' | 'purchaseTime' | 'status'>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('sold_items')
       .insert({
-        ...item,
+        tenant_id: tenantId,
+        code: item.code,
+        item_name: item.itemName,
+        item_id: item.itemId ?? null,
+        price: item.price,
         status: 'valid',
-        purchaseTime: new Date().toISOString()
+        type: item.type,
+        purchase_time: new Date().toISOString()
       })
       .select()
       .single();
@@ -170,7 +194,7 @@ export const salesApi = {
       .from('sold_items')
       .update({ 
         status: 'used',
-        purchaseTime: new Date().toISOString()
+        used_time: new Date().toISOString()
       })
       .eq('code', code)
       .eq('status', 'valid')
@@ -206,12 +230,22 @@ export const orderApi = {
   },
 
   async create(order: Partial<Order>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('orders')
       .insert({
-        ...order,
+        tenant_id: tenantId,
+        customer: order.customer ?? '',
+        customer_phone: order.customerPhone ?? null,
+        items: order.items ?? [],
+        total: order.total ?? 0,
         status: 'pending',
-        createdAt: new Date().toISOString()
+        time: order.time ?? new Date().toISOString(),
+        address: order.address ?? null,
+        location: order.location ?? null,
+        courier_id: order.courierId ?? null,
+        payment_method: order.paymentMethod ?? null,
+        notes: order.notes ?? null
       })
       .select()
       .single();
@@ -224,7 +258,7 @@ export const orderApi = {
       .from('orders')
       .update({ 
         status,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
@@ -237,8 +271,8 @@ export const orderApi = {
     const { data, error } = await supabase
       .from('orders')
       .update({ 
-        courierId,
-        updatedAt: new Date().toISOString()
+        courier_id: courierId,
+        updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
       .select()
@@ -248,9 +282,22 @@ export const orderApi = {
   },
 
   async update(id: string, updates: Partial<Order>) {
+    const dbUpdates: any = {};
+    if (updates.customer !== undefined) dbUpdates.customer = updates.customer;
+    if (updates.customerPhone !== undefined) dbUpdates.customer_phone = updates.customerPhone;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.location !== undefined) dbUpdates.location = updates.location;
+    if (updates.courierId !== undefined) dbUpdates.courier_id = updates.courierId;
+    if (updates.paymentMethod !== undefined) dbUpdates.payment_method = updates.paymentMethod;
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+    if (updates.total !== undefined) dbUpdates.total = updates.total;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.items !== undefined) dbUpdates.items = updates.items;
+    dbUpdates.updated_at = new Date().toISOString();
+
     const { data, error } = await supabase
       .from('orders')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
       .select()
       .single();
@@ -271,10 +318,14 @@ export const coverChargeApi = {
   },
 
   async addTransaction(transaction: Omit<CoverChargeTransaction, 'id' | 'timestamp'>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('cover_charge_transactions')
       .insert({
-        ...transaction,
+        tenant_id: tenantId,
+        type: transaction.type,
+        amount: transaction.amount,
+        method: transaction.method,
         timestamp: new Date().toISOString()
       })
       .select()
@@ -333,8 +384,9 @@ export const tableApi = {
       .update({ 
         status,
         orders,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
       })
+      .eq('tenant_id', await resolveTenantId())
       .eq('id', id)
       .select()
       .single();
@@ -343,9 +395,16 @@ export const tableApi = {
   },
 
   async create(table: Partial<Table>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('tables')
-      .insert(table)
+      .insert({
+        id: table.id ?? undefined,
+        tenant_id: table.tenantId || tenantId,
+        name: table.name ?? 'Mesa',
+        seats: table.seats ?? 4,
+        status: table.status ?? 'free'
+      })
       .select()
       .single();
     if (error) throw error;
@@ -375,9 +434,18 @@ export const eventApi = {
   },
 
   async create(event: Partial<Event>) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('events')
-      .insert(event)
+      .insert({
+        tenant_id: event.tenantId || tenantId,
+        title: event.title ?? 'Evento',
+        date: event.date ?? new Date().toISOString().split('T')[0],
+        time: event.time ?? '20:00',
+        location: event.location ?? null,
+        image: event.image ?? null,
+        tickets: event.tickets ?? []
+      })
       .select()
       .single();
     if (error) throw error;
@@ -398,10 +466,12 @@ export const eventApi = {
 
 export const courierApi = {
   async updatePosition(courierId: string, lat: number, lng: number) {
+    const tenantId = await resolveTenantId();
     const { error } = await supabase
       .from('courier_positions')
       .upsert({
-        courierId,
+        courier_id: courierId,
+        tenant_id: tenantId,
         lat,
         lng,
         timestamp: new Date().toISOString()
@@ -423,17 +493,19 @@ export const chatApi = {
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
-      .eq('orderId', orderId)
+      .eq('order_id', orderId)
       .order('timestamp', { ascending: true });
     if (error) throw error;
     return data;
   },
 
   async sendMessage(orderId: string, sender: 'customer' | 'system', message: string) {
+    const tenantId = await resolveTenantId();
     const { data, error } = await supabase
       .from('chat_messages')
       .insert({
-        orderId,
+        tenant_id: tenantId,
+        order_id: orderId,
         sender,
         message,
         timestamp: new Date().toISOString()

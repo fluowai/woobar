@@ -1,14 +1,19 @@
 import React from 'react';
 import { useMenu } from '../../hooks/useMenu';
-import { Armchair, Coffee, Search, Plus, Minus, Send } from 'lucide-react';
+import { useOrders } from '../../hooks/useOrders';
+import { Armchair, Coffee, Search, Plus, Minus, Send, Loader2, CheckCircle2, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { MenuItem } from '../../lib/database.types';
+import { printReceipt } from '../../lib/print';
 
 export default function TableService() {
   const { items: menuItems, loading } = useMenu();
+  const { createOrder } = useOrders();
   const [selectedTable, setSelectedTable] = React.useState<number | null>(null);
   const [cart, setCart] = React.useState<{item: MenuItem, quantity: number}[]>([]);
   const [search, setSearch] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [sent, setSent] = React.useState<{ table: number; total: number } | null>(null);
 
   const tables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const filteredItems = menuItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
@@ -34,11 +39,36 @@ export default function TableService() {
 
   const total = cart.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
 
-  const handleSendToKitchen = () => {
+  const handleSendToKitchen = async () => {
     if (!selectedTable || cart.length === 0) return;
-    alert(`Pedido da Mesa ${selectedTable} enviado para a cozinha!`);
-    setCart([]);
-    setSelectedTable(null);
+    setSending(true);
+    try {
+      const order = await createOrder({
+        customer: `Mesa ${selectedTable}`,
+        items: cart.map(c => ({ id: c.item.id, name: c.item.name, price: c.item.price, quantity: c.quantity })),
+        total,
+        address: `Mesa ${selectedTable}`,
+        notes: 'Pedido via atendimento de mesa'
+      });
+      setSent({ table: selectedTable, total });
+      setCart([]);
+      setSelectedTable(null);
+
+      printReceipt({
+        title: 'Cozinha - Pedido',
+        subtitle: `Mesa ${selectedTable}`,
+        items: cart.map(c => ({ name: c.item.name, quantity: c.quantity, price: c.item.price, total: c.item.price * c.quantity })),
+        total,
+        footer: `Mesa ${selectedTable}`
+      });
+
+      setTimeout(() => setSent(null), 4000);
+    } catch (err) {
+      console.error('Erro ao enviar pedido:', err);
+      alert('Erro ao enviar o pedido. Tente novamente.');
+    } finally {
+      setSending(false);
+    }
   };
 
   if (loading) return <div className="p-4">Carregando cardápio...</div>;
@@ -139,12 +169,30 @@ export default function TableService() {
               </div>
               <button 
                 onClick={handleSendToKitchen}
-                className="flex-1 bg-stone-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800"
+                disabled={sending}
+                className="flex-1 bg-stone-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800 disabled:opacity-50"
               >
-                <Send className="w-4 h-4" />
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Enviar
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {sent && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 text-white text-sm font-bold shadow-xl"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Pedido da Mesa {sent.table} enviado! R$ {sent.total.toFixed(2)}
+            <button onClick={() => printReceipt({ title: 'Cozinha - Pedido', subtitle: `Mesa ${sent.table}`, items: cart.map(c => ({ name: c.item.name, quantity: c.quantity, price: c.item.price, total: c.item.price * c.quantity })), total: sent.total, footer: `Mesa ${sent.table}` })} className="ml-2 p-1 bg-white/20 rounded hover:bg-white/40">
+              <Printer className="w-4 h-4" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

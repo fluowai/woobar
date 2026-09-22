@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
+import { resolveTenantId } from '../lib/tenant';
 import { useNavigate } from 'react-router-dom';
 
 interface DashboardStats {

@@ -20,7 +20,13 @@ const UsersPage = lazy(() => import('./pages/Users'));
 const TableManager = lazy(() => import('./pages/TableManager'));
 const POS = lazy(() => import('./pages/POS'));
 const Validation = lazy(() => import('./pages/Validation'));
+const KDS = lazy(() => import('./pages/KDS'));
+const CRM = lazy(() => import('./pages/CRM'));
+const AnalyticsDashboard = lazy(() => import('./pages/AnalyticsDashboard'));
 const TenantsList = lazy(() => import('./pages/SuperAdmin/TenantsList'));
+const SaasUsers = lazy(() => import('./pages/SuperAdmin/SaasUsers'));
+const SupportAdmin = lazy(() => import('./pages/SuperAdmin/SupportAdmin'));
+const Helpdesk = lazy(() => import('./pages/Helpdesk'));
 const ResellersList = lazy(() => import('./pages/MegaAdmin/ResellersList'));
 const TableService = lazy(() => import('./pages/Waiter/TableService'));
 const Integrations = lazy(() => import('./pages/Settings/Integrations'));
@@ -44,6 +50,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RoleRoute({ roles, children }: { roles: string[]; children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
 
@@ -62,8 +76,11 @@ function AppRoutes() {
           </ProtectedRoute>
         }>
           <Route index element={<Dashboard />} />
-          <Route path="resellers" element={<ResellersList />} />
-          <Route path="tenants" element={<TenantsList />} />
+          <Route path="resellers" element={<RoleRoute roles={['mega_admin']}><ResellersList /></RoleRoute>} />
+          <Route path="tenants" element={<RoleRoute roles={['mega_admin', 'super_admin']}><TenantsList /></RoleRoute>} />
+          <Route path="saas-users" element={<RoleRoute roles={['mega_admin', 'super_admin']}><SaasUsers /></RoleRoute>} />
+          <Route path="support-admin" element={<RoleRoute roles={['mega_admin', 'super_admin']}><SupportAdmin /></RoleRoute>} />
+          <Route path="helpdesk" element={<Helpdesk />} />
           <Route path="waiter" element={<TableService />} />
           <Route path="pix-terminal" element={<PixTerminal />} />
           <Route path="integrations" element={<Integrations />} />
@@ -75,6 +92,9 @@ function AppRoutes() {
           <Route path="bar" element={<BarTokens />} />
           <Route path="events" element={<Events />} />
           <Route path="validation" element={<Validation />} />
+          <Route path="kds" element={<KDS />} />
+          <Route path="crm" element={<CRM />} />
+          <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="cover" element={<CoverCharge />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
