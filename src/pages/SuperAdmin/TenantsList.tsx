@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Store, Plus, Search, Building2, CheckCircle2, XCircle, Loader2, MoreVertical, Pencil, Pause, Play, Trash2, X, CalendarDays, CreditCard, BadgeCheck } from 'lucide-react';
+import { Store, Plus, Search, Building2, CheckCircle2, XCircle, Loader2, MoreVertical, Pencil, Pause, Play, Trash2, X, CalendarDays, CreditCard, BadgeCheck, Eye, LogIn } from 'lucide-react';
+import { useTenant } from '../../contexts/TenantContext';
 import { supabase } from '../../lib/supabase';
 import type { Tenant } from '../../lib/database.types';
 
@@ -50,6 +51,7 @@ function ConfirmDialog({ open, title, message, confirmLabel, danger, onConfirm, 
 }
 
 export default function TenantsList() {
+  const { impersonateTenant, isImpersonating, stopImpersonation } = useTenant();
   const [search, setSearch] = useState('');
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,6 +198,21 @@ export default function TenantsList() {
     }
   };
 
+  const handleImpersonate = (tenant: TenantRow) => {
+    const tenantData: Tenant = {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      plan: tenant.plan,
+      status: tenant.status,
+    };
+    impersonateTenant(tenantData);
+    setToast({ message: `Acessando como ${tenant.name}...`, type: 'success' });
+    setOpenMenuId(null);
+    // Redireciona para o dashboard
+    window.location.href = '/';
+  };
+
   const filteredTenants = tenants.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
   const activeCount = tenants.filter(t => t.status === 'active').length;
 
@@ -256,9 +273,9 @@ export default function TenantsList() {
               <thead className="bg-stone-50 text-stone-900 font-bold">
                 <tr>
                   <th className="px-4 py-3 rounded-l-xl">Restaurante / Bar</th>
-                  <th className="px-4 py-3">Slug (URL)</th>
-                  <th className="px-4 py-3">Plano</th>
-                  <th className="px-4 py-3">Cobrança</th>
+                  <th className="hidden sm:table-cell px-4 py-3">Slug (URL)</th>
+                  <th className="hidden md:table-cell px-4 py-3">Plano</th>
+                  <th className="hidden lg:table-cell px-4 py-3">Cobrança</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 rounded-r-xl">Ações</th>
                 </tr>
@@ -287,13 +304,13 @@ export default function TenantsList() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 font-mono text-stone-500">/{tenant.slug}</td>
-                      <td className="px-4 py-4">
+                      <td className="hidden sm:table-cell px-4 py-4 font-mono text-stone-500">/{tenant.slug}</td>
+                      <td className="hidden md:table-cell px-4 py-4">
                         <span className="uppercase text-xs font-bold tracking-wider px-2.5 py-1 rounded-full bg-stone-100 text-stone-700">
                           {PLAN_LABELS[tenant.plan] || tenant.plan}
                         </span>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="hidden lg:table-cell px-4 py-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
                           tenant.billingStatus === 'paid' ? 'bg-emerald-100 text-emerald-700'
                           : tenant.billingStatus === 'pending' ? 'bg-amber-100 text-amber-700'
@@ -311,36 +328,67 @@ export default function TenantsList() {
                           {tenant.status === 'active' ? 'Ativo' : 'Suspenso'}
                         </span>
                       </td>
-                      <td className="px-4 py-4 relative">
-                        <button
-                          onClick={() => setOpenMenuId(openMenuId === tenant.id ? null : tenant.id)}
-                          className="text-stone-400 hover:text-stone-900 p-1 rounded-lg hover:bg-stone-100"
-                        >
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
-                        {openMenuId === tenant.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                            <div className="absolute right-0 top-12 z-20 w-52 bg-white rounded-2xl shadow-xl border border-stone-100 p-1.5">
-                              <button onClick={() => { setDetailTenant(tenant); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-stone-50 text-left">
-                                <Store className="w-4 h-4 text-stone-400" /> Ver detalhes
-                              </button>
-                              <button onClick={() => { openEdit(tenant); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-stone-50 text-left">
-                                <Pencil className="w-4 h-4 text-stone-400" /> Editar dados / plano
-                              </button>
-                              <button onClick={() => { setConfirmState({ id: tenant.id, name: tenant.name, status: tenant.status }); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-stone-50 text-left">
-                                {tenant.status === 'active'
-                                  ? <><Pause className="w-4 h-4 text-amber-600" /> Suspender restaurante</>
-                                  : <><Play className="w-4 h-4 text-emerald-600" /> Reativar restaurante</>}
-                              </button>
-                              <button onClick={() => { setDeleteState({ id: tenant.id, name: tenant.name }); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-red-600 hover:bg-red-50 text-left">
-                                <Trash2 className="w-4 h-4" /> Excluir
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </td>
-                    </tr>
+                       <td className="px-4 py-4 relative">
+                         {/* Desktop: Dropdown menu */}
+                         <div className="hidden md:block">
+                           <button
+                             onClick={() => setOpenMenuId(openMenuId === tenant.id ? null : tenant.id)}
+                             className="text-stone-400 hover:text-stone-900 p-1 rounded-lg hover:bg-stone-100"
+                           >
+                             <MoreVertical className="w-5 h-5" />
+                           </button>
+                           {openMenuId === tenant.id && (
+                             <>
+                               <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                               <div className="absolute right-0 top-12 z-20 w-64 bg-white rounded-2xl shadow-xl border border-stone-100 p-1.5">
+                                 <button onClick={() => { setDetailTenant(tenant); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-stone-50 text-left">
+                                   <Eye className="w-4 h-4 text-stone-400" /> Ver detalhes
+                                 </button>
+                                 <button onClick={() => { handleImpersonate(tenant); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-orange-50 text-left text-orange-700 font-medium">
+                                   <LogIn className="w-4 h-4" /> Entrar como este restaurante
+                                 </button>
+                                 <button onClick={() => { openEdit(tenant); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-stone-50 text-left">
+                                   <Pencil className="w-4 h-4 text-stone-400" /> Editar dados / plano
+                                 </button>
+                                 <button onClick={() => { setConfirmState({ id: tenant.id, name: tenant.name, status: tenant.status }); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-stone-50 text-left">
+                                   {tenant.status === 'active'
+                                     ? <><Pause className="w-4 h-4 text-amber-600" /> Suspender restaurante</>
+                                     : <><Play className="w-4 h-4 text-emerald-600" /> Reativar restaurante</>}
+                                 </button>
+                                 <button onClick={() => { setDeleteState({ id: tenant.id, name: tenant.name }); setOpenMenuId(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-600 hover:bg-red-50 text-left">
+                                   <Trash2 className="w-4 h-4" /> Excluir
+                                 </button>
+                               </div>
+                             </>
+                           )}
+                         </div>
+                         
+                         {/* Mobile: Botões visíveis */}
+                         <div className="md:hidden flex gap-1.5">
+                           <button 
+                             onClick={() => handleImpersonate(tenant)}
+                             className="p-2 text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100"
+                             title="Entrar como"
+                           >
+                             <LogIn className="w-4 h-4" />
+                           </button>
+                           <button 
+                             onClick={() => { setDetailTenant(tenant); }}
+                             className="p-2 text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200"
+                             title="Ver detalhes"
+                           >
+                             <Eye className="w-4 h-4" />
+                           </button>
+                           <button 
+                             onClick={() => { openEdit(tenant); }}
+                             className="p-2 text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200"
+                             title="Editar"
+                           >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                     </tr>
                   ))
                 )}
               </tbody>
