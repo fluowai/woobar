@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  # ============================================================
+  # FRONTEND - WOOBAR
+  # ============================================================
+  woobar-frontend:
+    image: ghcr.io/fluowai/woobar-frontend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      VITE_SUPABASE_URL: "https://wcuknwkjrsnxjbpbktau.supabase.co"
+      VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjdWtud2tqcnNueGpicGJrdGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5NjExMjEsImV4cCI6MjEwNDUzNzEyMX0.CY4lDUYDbYiFGgKZ_xKXhOfYn3oiSkWHFqa3hUWvjb0"
+    networks:
+      - woo-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384m
+        reservations:
+          memory: 64m
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woo-network"
+        - "traefik.http.routers.woobar-frontend.rule=Host(`woobar.wootech.com.br`)"
+        - "traefik.http.routers.woobar-frontend.entrypoints=websecure"
+        - "traefik.http.routers.woobar-frontend.tls=true"
+        - "traefik.http.routers.woobar-frontend.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.woobar-frontend.priority=1"
+        - "traefik.http.routers.woobar-frontend.service=woobar-frontend"
+        - "traefik.http.services.woobar-frontend.loadbalancer.server.port=80"
+
+  # ============================================================
+  # API - WOOBAR
+  # ============================================================
+  woobar-api:
+    image: ghcr.io/fluowai/woobar-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      SUPABASE_URL: "https://wcuknwkjrsnxjbpbktau.supabase.co"
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjdWtud2tqcnNueGpicGJrdGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5NjExMjEsImV4cCI6MjEwNDUzNzEyMX0.CY4lDUYDbYiFGgKZ_xKXhOfYn3oiSkWHFqa3hUWvjb0"
+      SUPABASE_SERVICE_KEY: "22i-Ybm4MpGpicXjZugHJ8uKfJXcPA5Kpim/88ahppLDsCrqtVBIYToz9uNjgVkstiEScOMBigXJDMLKxjAqUuaquZnj3w=="
+      JWT_SECRET: "cMOmx4xJZugHJ8uKfJXcPA5Kpim/88ahppLDsCrqtVBIYToz9uNjgVkstiEScOMBigXJDMLKxjAqUuaquZnj3w=="
+      DATABASE_URL: "postgresql://postgres.wcuknwkjrsnxjbpbktau:lMQFADbsT9wY2vjb0@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
+    networks:
+      - woo-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384m
+        reservations:
+          memory: 64m
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=woo-network"
+        - "traefik.http.routers.woobar-api.rule=Host(`api.woobar.wootech.com.br`)"
+        - "traefik.http.routers.woobar-api.entrypoints=websecure"
+        - "traefik.http.routers.woobar-api.tls=true"
+        - "traefik.http.routers.woobar-api.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.woobar-api.priority=2"
+        - "traefik.http.routers.woobar-api.service=woobar-api"
+        - "traefik.http.services.woobar-api.loadbalancer.server.port=3000"
+
+# ==============================================================
+# NETWORKS
+# ==============================================================
+networks:
+  woo-network:
+    external: true
