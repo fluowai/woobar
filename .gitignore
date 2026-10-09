@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.production
+server/data/
+server/dist/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+fiscal/vendor/

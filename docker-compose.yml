@@ -1,0 +1,79 @@
+# =============================================================================
+# Woobar — Docker Compose (produção / Portainer Stack)
+# =============================================================================
+# Uso no Portainer:
+#   1. Stacks > Add stack > Git ou Upload de arquivo
+#   2. Envie este docker-compose.yml junto com um .env (use .env.example como base)
+#   3. Defina JWT_SECRET (>= 32 chars) e FISCAL_TOKEN no Environment da stack
+#   4. Deploy — serviços ficam em http://<host>:3001
+#
+# Em produção atrás de reverse proxy/TLS, defina:
+#   CORS_ORIGIN=https://seu-dominio.com
+#   APP_URL=https://seu-dominio.com
+# =============================================================================
+
+services:
+  woobar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: woobar
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET obrigatório (mín. 32 caracteres)}
+      - DATABASE_PATH=/app/data/woobar.db
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3001}
+      - APP_URL=${APP_URL:-http://localhost:3001}
+      - BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-24}
+      - BACKUP_KEEP=${BACKUP_KEEP:-14}
+      - FISCAL_URL=${FISCAL_URL:-http://fiscal:8080}
+      - FISCAL_TOKEN=${FISCAL_TOKEN:-}
+    volumes:
+      - woobar_data:/app/data
+      - woobar_uploads:/app/uploads
+    depends_on:
+      fiscal:
+        condition: service_healthy
+    networks:
+      - woobar_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  fiscal:
+    build:
+      context: ./fiscal
+      dockerfile: Dockerfile
+    container_name: woobar-fiscal
+    restart: unless-stopped
+    environment:
+      - FISCAL_TOKEN=${FISCAL_TOKEN:-}
+      - FISCAL_STORAGE=/app/storage
+    volumes:
+      - fiscal_storage:/app/storage
+    expose:
+      - "8080"
+    networks:
+      - woobar_net
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://localhost:8080/health') ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  woobar_net:
+    driver: bridge
+
+volumes:
+  woobar_data:
+  woobar_uploads:
+  fiscal_storage:

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, MapPin, Clock, Users, Ticket, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 
 const EVENTS = [
   {
@@ -43,8 +44,13 @@ const EVENTS = [
 ];
 
 export default function Events() {
-  const [selectedEvent, setSelectedEvent] = useState<typeof EVENTS[0] | null>(null);
+  const [events, setEvents] = useState<any[]>(EVENTS);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [ticketSelection, setTicketSelection] = useState<{ [key: string]: number }>({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => { api.getEvents().then((result:any[]) => { if (result.length) setEvents(result); }).catch(()=>{}); }, []);
 
   const handleTicketChange = (ticketId: string, delta: number) => {
     setTicketSelection(prev => ({
@@ -57,10 +63,17 @@ export default function Events() {
     return acc + (ticket.price * (ticketSelection[ticket.id] || 0));
   }, 0) : 0;
 
-  const handlePurchase = () => {
-    alert(`Compra realizada com sucesso!\nTotal: R$ ${total.toFixed(2)}`);
-    setTicketSelection({});
-    setSelectedEvent(null);
+  const handlePurchase = async () => {
+    if (!selectedEvent) return;
+    setBusy(true); setMessage('');
+    try {
+      const selected = selectedEvent.tickets.filter((ticket:any) => (ticketSelection[ticket.id] || 0) > 0);
+      const results = await Promise.all(selected.map((ticket:any) => api.sellTickets({ event_id: selectedEvent.id, ticket_type_id: ticket.id, quantity: ticketSelection[ticket.id], total: ticket.price * ticketSelection[ticket.id], buyer_name: '' })));
+      setMessage(`${results.length} ingresso(s) gerado(s) e enviado(s) para impressao.`);
+      setTicketSelection({});
+      const refreshed = await api.getEvents(); setEvents(refreshed); setSelectedEvent(null);
+    } catch(e:any) { setMessage(e.message || 'Falha ao vender ingressos.'); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -69,7 +82,8 @@ export default function Events() {
       <div className="flex-1 overflow-y-auto pr-2">
         <h2 className="text-2xl font-bold font-display text-stone-900 mb-6">Próximos Eventos</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {EVENTS.map((event) => (
+          {message && <div className="md:col-span-2 xl:col-span-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl p-3">{message}</div>}
+          {events.map((event) => (
             <motion.div
               key={event.id}
               layoutId={`event-${event.id}`}
@@ -87,7 +101,7 @@ export default function Events() {
                   referrerPolicy="no-referrer"
                 />
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-sm font-bold text-stone-900 shadow-sm">
-                  {event.date}
+                {event.date ? new Date(`${event.date}T12:00:00`).toLocaleDateString('pt-BR') : ''}
                 </div>
               </div>
               <div className="p-5">
@@ -166,11 +180,11 @@ export default function Events() {
               </div>
               <button
                 onClick={handlePurchase}
-                disabled={total === 0}
+                disabled={total === 0 || busy}
                 className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-stone-200 flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
-                Confirmar Venda
+                {busy ? 'Gerando...' : 'Confirmar e Imprimir'}
               </button>
             </div>
           </motion.div>

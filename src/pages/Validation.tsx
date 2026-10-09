@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QrCode, Ticket, CheckCircle, XCircle, Search, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { SalesStore } from '../lib/store';
+import { api } from '../lib/api';
 
 type ValidationType = 'token' | 'ticket';
 
@@ -30,43 +30,44 @@ export default function Validation() {
     setIsLoading(true);
     setResult(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const item = SalesStore.validateCode(code);
+    const validate = async () => {
+      try {
+        let res: any;
+        if (activeTab === 'token') {
+          res = await api.validateToken(code);
+        } else {
+          res = await api.validateTicket(code);
+        }
 
-      if (!item) {
+        if (res.status === 'valid') {
+          setResult({
+            status: 'valid',
+            message: res.message || 'Código Válido!',
+            details: res.details,
+          });
+        } else if (res.status === 'used') {
+          setResult({
+            status: 'used',
+            message: res.message || 'Código já utilizado',
+            details: res.details,
+          });
+        } else {
+          setResult({
+            status: 'invalid',
+            message: res.message || 'Código não encontrado',
+          });
+        }
+      } catch {
         setResult({
           status: 'invalid',
-          message: 'Código não encontrado',
-        });
-      } else if (item.status === 'used') {
-        setResult({
-          status: 'used',
-          message: 'Este código já foi utilizado',
-          details: {
-            item: item.itemName,
-            value: `R$ ${item.price.toFixed(2)}`,
-            timestamp: item.purchaseTime
-          }
-        });
-      } else {
-        // Mark as used
-        SalesStore.markAsUsed(code);
-        setResult({
-          status: 'valid',
-          message: 'Código Válido!',
-          details: {
-            item: item.itemName,
-            value: `R$ ${item.price.toFixed(2)}`,
-          }
+          message: 'Erro ao validar código',
         });
       }
       setIsLoading(false);
       setCode('');
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    }, 800);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+    validate();
   };
 
   const reset = () => {
@@ -124,14 +125,12 @@ export default function Validation() {
               autoFocus
             />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-6 h-6" />
-            {activeTab === 'token' && (
               <button
                 type="submit"
                 className="w-full mt-4 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors shadow-md"
               >
-                Validar Ficha
+                {activeTab === 'token' ? 'Validar Ficha' : 'Validar Ingresso'}
               </button>
-            )}
           </form>
 
           <AnimatePresence mode="wait">

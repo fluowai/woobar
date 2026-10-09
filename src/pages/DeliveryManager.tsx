@@ -1,28 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  CheckCircle, 
-  ChefHat, 
-  Truck, 
-  MapPin, 
-  Phone,
-  MoreVertical,
-  AlertCircle,
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Clock,
+  CheckCircle,
+  ChefHat,
+  Truck,
+  MapPin,
   Bike,
   Navigation,
   RefreshCw,
   ChevronDown,
   MessageSquare,
   Filter,
-  ArrowUpDown,
-  DollarSign
+  DollarSign,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import DeliveryMap from '../components/DeliveryMap';
 import GoogleDeliveryMap from '../components/GoogleDeliveryMap';
 import OrderChat from '../components/OrderChat';
-import { MOCK_USERS, User } from '../data/users';
+import { User } from '../data/users';
+import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
+import { useAuth } from '../lib/auth';
 import { autoDispatch, getDistanceFromLatLonInKm } from '../lib/dispatchSystem';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered';
@@ -30,6 +31,7 @@ type SortOption = 'time' | 'value';
 
 interface Order {
   id: string;
+  displayId: string;
   customer: string;
   items: string[];
   total: number;
@@ -40,49 +42,32 @@ interface Order {
   location?: { lat: number; lng: number };
 }
 
-const MOCK_ORDERS: Order[] = [
-  {
-    id: '#2021',
-    customer: 'Ana Silva',
-    items: ['2x Woobar Classic', '1x Coca-Cola'],
-    total: 78.80,
-    status: 'pending',
-    time: '10 min',
-    address: 'Rua das Flores, 123 - Centro',
-    location: { lat: -23.5489, lng: -46.6388 }
-  },
-  {
-    id: '#2020',
-    customer: 'Carlos Oliveira',
-    items: ['1x Smash Duplo', '1x Batata Rústica'],
-    total: 47.80,
-    status: 'preparing',
-    time: '25 min',
-    address: 'Av. Paulista, 1000 - Apt 45',
-    location: { lat: -23.5615, lng: -46.6559 }
-  },
-  {
-    id: '#2019',
-    customer: 'Beatriz Santos',
-    items: ['3x Gin Tônica', '1x Coxinha da Asa'],
-    total: 108.90,
-    status: 'ready',
-    time: '40 min',
-    address: 'Rua Augusta, 500',
-    location: { lat: -23.5531, lng: -46.6543 }
-  },
-  {
-    id: '#2018',
-    customer: 'João Souza',
-    items: ['1x Veggie Supreme'],
-    total: 30.90,
-    status: 'delivering',
-    time: '55 min',
-    address: 'Rua Bela Cintra, 200',
-    courierId: '3', // Assigned to Marcos
-    location: { lat: -23.5567, lng: -46.6623 }
+const parseItems = (itemsJson: string): string[] => {
+  try {
+    const arr = JSON.parse(itemsJson);
+    if (!Array.isArray(arr)) return [];
+    return arr.map((i: any) => `${i.quantity ?? 1}x ${i.name ?? 'Item'}`);
+  } catch {
+    return [];
   }
-];
+};
+
+const minutesSince = (createdAt: string): string => {
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+  return `${diff} min`;
+};
+
+const mapApiOrder = (o: any): Order => ({
+  id: o.id,
+  displayId: `#${String(o.id).slice(0, 6).toUpperCase()}`,
+  customer: o.customer_name || 'Cliente',
+  items: parseItems(o.items_json),
+  total: Number(o.total) || 0,
+  status: o.status as OrderStatus,
+  time: o.created_at ? minutesSince(o.created_at) : '--',
+  address: o.customer_address || 'Retirada no balcão',
+  courierId: o.courier_id || undefined,
+});
 
 interface OrderCardProps {
   order: Order;
@@ -90,6 +75,7 @@ interface OrderCardProps {
   moveStatus: (id: string, status: OrderStatus) => void;
   status: OrderStatus;
   onChatClick: (orderId: string) => void;
+  busy?: boolean;
 }
 
 const getOrderPriority = (timeStr: string): 'normal' | 'warning' | 'late' => {
@@ -106,12 +92,10 @@ const calculateETA = (order: Order, courier?: User) => {
   const STORE_LOCATION = { lat: -23.550520, lng: -46.633308 };
   let remainingTime = 0;
 
-  // Prep time estimation
   if (order.status === 'pending') remainingTime += 25;
   if (order.status === 'preparing') remainingTime += 15;
-  if (order.status === 'ready') remainingTime += 5; // buffer for pickup
+  if (order.status === 'ready') remainingTime += 5;
 
-  // Travel time estimation
   let startLocation = STORE_LOCATION;
   if (order.status === 'delivering' && courier?.currentLocation) {
     startLocation = courier.currentLocation;
@@ -123,24 +107,24 @@ const calculateETA = (order: Order, courier?: User) => {
     order.location.lat,
     order.location.lng
   );
-  
-  // Assume 20km/h average speed in city = ~3 mins per km
+
   const travelTime = Math.ceil(distance * 3);
   remainingTime += travelTime;
 
   return `~${remainingTime} min`;
 };
 
-const OrderCard: React.FC<OrderCardProps> = ({ 
-  order, 
-  couriers, 
-  moveStatus, 
+const OrderCard: React.FC<OrderCardProps> = ({
+  order,
+  couriers,
+  moveStatus,
   status,
-  onChatClick
+  onChatClick,
+  busy
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const priority = getOrderPriority(order.time);
-  
+
   const assignedCourier = order.courierId ? couriers.find(c => c.id === order.courierId) : undefined;
   const eta = calculateETA(order, assignedCourier);
 
@@ -167,7 +151,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
       <div className="flex justify-between items-start mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-orange-500">{order.id}</span>
+            <span className="text-xs font-bold text-orange-500">{order.displayId}</span>
             {priority === 'late' && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 uppercase tracking-wide">
                 Atrasado
@@ -188,7 +172,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
               {couriers.find(c => c.id === order.courierId)?.name.split(' ')[0]}
             </div>
           )}
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); onChatClick(order.id); }}
             className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg transition-colors"
             title="Chat com cliente"
@@ -205,8 +189,8 @@ const OrderCard: React.FC<OrderCardProps> = ({
         </div>
         {order.status !== 'delivered' && (
           <div className="flex items-center gap-1.5 text-xs text-stone-500 font-medium bg-stone-50 px-2 py-1 rounded-md border border-stone-100">
-             <Navigation className="w-3 h-3 text-stone-400" />
-             <span>Chegada: {eta}</span>
+            <Navigation className="w-3 h-3 text-stone-400" />
+            <span>Chegada: {eta}</span>
           </div>
         )}
       </div>
@@ -225,34 +209,32 @@ const OrderCard: React.FC<OrderCardProps> = ({
               ))}
             </div>
             <div className="flex justify-between items-center text-sm font-bold text-stone-900 mb-4">
-                <span>Total</span>
-                <span>R$ {order.total.toFixed(2)}</span>
+              <span>Total</span>
+              <span>R$ {order.total.toFixed(2)}</span>
             </div>
 
-            {/* Embedded Map for Order */}
             {order.location && (
               <div className="mb-4 h-32 w-full rounded-lg overflow-hidden border border-stone-200 relative">
-                 <DeliveryMap 
-                    locations={[
-                      { lat: order.location.lat, lng: order.location.lng, type: 'delivery', label: 'Cliente', id: order.id },
-                      ...(order.courierId && couriers.find(c => c.id === order.courierId)?.currentLocation ? [{
-                        lat: couriers.find(c => c.id === order.courierId)!.currentLocation!.lat,
-                        lng: couriers.find(c => c.id === order.courierId)!.currentLocation!.lng,
-                        type: 'courier' as const,
-                        label: 'Entregador',
-                        id: order.courierId
-                      }] : [])
-                    ]}
-                    routes={order.status === 'delivering' && order.courierId && couriers.find(c => c.id === order.courierId)?.currentLocation ? [{
-                      from: couriers.find(c => c.id === order.courierId)!.currentLocation!,
-                      to: order.location,
-                      color: 'purple'
-                    }] : []}
-                 />
-                 {/* Overlay to prevent interaction if desired, or keep interactive */}
-                 <div className="absolute top-1 right-1 bg-white/80 backdrop-blur-sm px-2 py-1 rounded text-[10px] font-bold text-stone-500 pointer-events-none z-[1000]">
-                    {order.address}
-                 </div>
+                <DeliveryMap
+                  locations={[
+                    { lat: order.location.lat, lng: order.location.lng, type: 'delivery', label: 'Cliente', id: order.id },
+                    ...(order.courierId && couriers.find(c => c.id === order.courierId)?.currentLocation ? [{
+                      lat: couriers.find(c => c.id === order.courierId)!.currentLocation!.lat,
+                      lng: couriers.find(c => c.id === order.courierId)!.currentLocation!.lng,
+                      type: 'courier' as const,
+                      label: 'Entregador',
+                      id: order.courierId
+                    }] : [])
+                  ]}
+                  routes={order.status === 'delivering' && order.courierId && couriers.find(c => c.id === order.courierId)?.currentLocation ? [{
+                    from: couriers.find(c => c.id === order.courierId)!.currentLocation!,
+                    to: order.location,
+                    color: 'purple'
+                  }] : []}
+                />
+                <div className="absolute top-1 right-1 bg-white/80 backdrop-blur-sm px-2 py-1 rounded text-[10px] font-bold text-stone-500 pointer-events-none z-[1000]">
+                  {order.address}
+                </div>
               </div>
             )}
           </motion.div>
@@ -269,17 +251,19 @@ const OrderCard: React.FC<OrderCardProps> = ({
 
       <div className="flex gap-2 mt-2">
         {status === 'pending' && (
-          <button 
+          <button
+            disabled={busy}
             onClick={() => moveStatus(order.id, 'preparing')}
-            className="flex-1 py-2 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800"
+            className="flex-1 py-2 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 disabled:opacity-50"
           >
             Aceitar
           </button>
         )}
         {status === 'preparing' && (
-          <button 
+          <button
+            disabled={busy}
             onClick={() => moveStatus(order.id, 'ready')}
-            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             Pronto
           </button>
@@ -290,9 +274,10 @@ const OrderCard: React.FC<OrderCardProps> = ({
           </div>
         )}
         {status === 'delivering' && (
-          <button 
+          <button
+            disabled={busy}
             onClick={() => moveStatus(order.id, 'delivered')}
-            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
           >
             Entregue
           </button>
@@ -303,72 +288,94 @@ const OrderCard: React.FC<OrderCardProps> = ({
 };
 
 export default function DeliveryManager() {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
-  const [couriers, setCouriers] = useState<User[]>(MOCK_USERS.filter(u => u.role === 'courier'));
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [couriers, setCouriers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [autoDispatchEnabled, setAutoDispatchEnabled] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedOrderForChat, setSelectedOrderForChat] = useState<Order | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('time');
   const [filterStatus, setFilterStatus] = useState<OrderStatus | 'all'>('all');
-  
-  // Use environment variable for API key
-  const googleMapsApiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const toast = useToast();
+  const { hasRole } = useAuth();
 
-  // Simulate courier movement - Updated to 15 seconds as requested
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCouriers(prev => prev.map(c => {
-        if (c.status === 'active' && c.currentLocation) {
-          // Random walk simulation
-          return {
-            ...c,
-            currentLocation: {
-              lat: c.currentLocation.lat + (Math.random() - 0.5) * 0.002, // Slightly larger movement for longer interval
-              lng: c.currentLocation.lng + (Math.random() - 0.5) * 0.002
-            }
-          };
-        }
-        return c;
-      }));
-    }, 15000); // 15 seconds
-    return () => clearInterval(interval);
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string || '';
+
+  const load = useCallback(async () => {
+    try {
+      const [ordersData, couriersData] = await Promise.all([
+        api.getOrders(),
+        api.getCouriers(),
+      ]);
+      setOrders((Array.isArray(ordersData) ? ordersData : []).map(mapApiOrder));
+      setCouriers((Array.isArray(couriersData) ? couriersData : []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        role: 'courier',
+        status: c.status || 'active',
+        avatar: c.avatar || undefined,
+        isAvailable: Boolean(c.is_available),
+        currentLocation: c.current_location_lat != null && c.current_location_lng != null
+          ? { lat: c.current_location_lat, lng: c.current_location_lng }
+          : undefined,
+      } as User)));
+      setLoadError('');
+    } catch (e: any) {
+      setLoadError(e.message || 'Falha ao carregar pedidos');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Auto-dispatch logic
+  useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh a cada 20s
   useEffect(() => {
-    if (autoDispatchEnabled) {
-      const assignments = autoDispatch(orders, couriers);
-      if (assignments.length > 0) {
-        setOrders(prev => prev.map(o => {
-          const assignment = assignments.find(a => a.orderId === o.id);
-          if (assignment) {
-            return { ...o, courierId: assignment.courierId, status: 'delivering' };
-          }
-          return o;
-        }));
-        
-        // Mark couriers as busy
-        setCouriers(prev => prev.map(c => {
-          if (assignments.find(a => a.courierId === c.id)) {
-            return { ...c, isAvailable: false };
-          }
-          return c;
-        }));
-      }
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const moveStatus = async (orderId: string, newStatus: OrderStatus) => {
+    setBusyId(orderId);
+    const prev = orders;
+    setOrders(list => list.map(order => order.id === orderId ? { ...order, status: newStatus } : order));
+    try {
+      await api.updateOrderStatus(orderId, newStatus);
+      toast.success(`Pedido ${prev.find(o => o.id === orderId)?.displayId || ''} → ${newStatus}`);
+    } catch (e) {
+      setOrders(prev);
+      toast.error(e);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const toggleCourierAvailability = async (courierId: string) => {
+    const courier = couriers.find(c => c.id === courierId);
+    if (!courier) return;
+    try {
+      await api.updateUser(courierId, { is_available: !courier.isAvailable });
+      setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, isAvailable: !c.isAvailable } : c));
+    } catch (e) {
+      toast.error(e);
+    }
+  };
+
+  // Auto-dispatch — persiste no servidor
+  useEffect(() => {
+    if (!autoDispatchEnabled) return;
+    const assignments = autoDispatch(orders, couriers);
+    if (assignments.length > 0) {
+      assignments.forEach(a => {
+        setOrders(prev => prev.map(o => o.id === a.orderId ? { ...o, courierId: a.courierId, status: 'delivering' } : o));
+        setCouriers(prev => prev.map(c => c.id === a.courierId ? { ...c, isAvailable: false } : c));
+        api.updateOrderStatus(a.orderId, 'delivering', a.courierId).catch(e => toast.error(e));
+      });
     }
   }, [autoDispatchEnabled, orders, couriers]);
-
-  const moveStatus = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
-  };
-
-  const toggleCourierAvailability = (courierId: string) => {
-    setCouriers(prev => prev.map(c => 
-      c.id === courierId ? { ...c, isAvailable: !c.isAvailable } : c
-    ));
-  };
 
   const handleChatClick = (orderId: string) => {
     const order = orders.find(o => o.id === orderId);
@@ -378,7 +385,6 @@ export default function DeliveryManager() {
     }
   };
 
-  // Map Data Preparation
   const mapLocations = [
     { lat: -23.550520, lng: -46.633308, type: 'store' as const, label: 'Woobar' },
     ...couriers.filter(c => c.currentLocation).map(c => ({
@@ -392,7 +398,7 @@ export default function DeliveryManager() {
       lat: o.location!.lat,
       lng: o.location!.lng,
       type: 'delivery' as const,
-      label: `Pedido ${o.id}`,
+      label: `Pedido ${o.displayId}`,
       id: o.id
     }))
   ];
@@ -402,30 +408,22 @@ export default function DeliveryManager() {
     .map(o => {
       const courier = couriers.find(c => c.id === o.courierId);
       if (courier && courier.currentLocation) {
-        return {
-          from: courier.currentLocation,
-          to: o.location!
-        };
+        return { from: courier.currentLocation, to: o.location! };
       }
       return null;
     })
     .filter(Boolean) as any[];
 
-
   const KanbanColumn = ({ title, status, icon: Icon }: { title: string, status: OrderStatus, icon: any }) => {
-    // Filter and Sort Logic
     const columnOrders = orders
       .filter(o => o.status === status)
       .sort((a, b) => {
         if (sortBy === 'time') {
-          // Sort by time (descending - longest wait first)
           const timeA = parseInt(a.time.replace(/\D/g, '')) || 0;
           const timeB = parseInt(b.time.replace(/\D/g, '')) || 0;
           return timeB - timeA;
-        } else {
-          // Sort by value (descending - highest value first)
-          return b.total - a.total;
         }
+        return b.total - a.total;
       });
 
     return (
@@ -437,25 +435,49 @@ export default function DeliveryManager() {
             {columnOrders.length}
           </span>
         </div>
-        
+
         <div className="space-y-3 overflow-y-auto flex-1 pr-2">
           {columnOrders.map(order => (
-            <OrderCard 
-              key={order.id} 
-              order={order} 
-              couriers={couriers} 
-              moveStatus={moveStatus} 
-              status={status} 
+            <OrderCard
+              key={order.id}
+              order={order}
+              couriers={couriers}
+              moveStatus={moveStatus}
+              status={status}
               onChatClick={handleChatClick}
+              busy={busyId === order.id}
             />
           ))}
+          {columnOrders.length === 0 && (
+            <p className="text-xs text-stone-400 text-center py-6 italic">Sem pedidos</p>
+          )}
         </div>
       </div>
     );
   };
 
   const preparingCount = orders.filter(o => o.status === 'preparing').length;
-  const isOverloaded = preparingCount >= 2; // Threshold for demo purposes
+  const isOverloaded = preparingCount >= 2;
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-stone-400">
+        <Loader2 className="w-6 h-6 animate-spin" />
+        <span className="text-sm">Carregando pedidos...</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 text-center">
+        <p className="text-sm text-red-600">{loadError}</p>
+        <button onClick={() => { setLoading(true); load(); }} className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-medium">
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
@@ -491,7 +513,7 @@ export default function DeliveryManager() {
           <div className="relative group">
             <button className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 transition-all">
               <Filter className="w-4 h-4" />
-              {filterStatus === 'all' ? 'Todos Status' : 
+              {filterStatus === 'all' ? 'Todos Status' :
                filterStatus === 'pending' ? 'Pendentes' :
                filterStatus === 'preparing' ? 'Em Preparo' :
                filterStatus === 'ready' ? 'Prontos' :
@@ -523,19 +545,19 @@ export default function DeliveryManager() {
 
           <div className={cn(
             "px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border transition-all",
-            isOverloaded 
-              ? "bg-red-100 text-red-700 border-red-200 animate-pulse" 
+            isOverloaded
+              ? "bg-red-100 text-red-700 border-red-200 animate-pulse"
               : "bg-emerald-100 text-emerald-700 border-emerald-200"
           )}>
             <ChefHat className="w-4 h-4" />
             {isOverloaded ? 'Cozinha Sobrecarregada' : 'Cozinha Operando Normal'}
           </div>
-          <button 
+          <button
             onClick={() => setAutoDispatchEnabled(!autoDispatchEnabled)}
             className={cn(
               "px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border transition-all",
-              autoDispatchEnabled 
-                ? "bg-emerald-100 text-emerald-700 border-emerald-200" 
+              autoDispatchEnabled
+                ? "bg-emerald-100 text-emerald-700 border-emerald-200"
                 : "bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200"
             )}
           >
@@ -563,12 +585,13 @@ export default function DeliveryManager() {
             <div className="flex gap-4 overflow-x-auto pb-2">
               {orders.filter(o => o.status === 'pending').map(order => (
                 <div key={order.id} className="min-w-[280px]">
-                  <OrderCard 
-                    order={order} 
-                    couriers={couriers} 
-                    moveStatus={moveStatus} 
-                    status="pending" 
+                  <OrderCard
+                    order={order}
+                    couriers={couriers}
+                    moveStatus={moveStatus}
+                    status="pending"
                     onChatClick={handleChatClick}
+                    busy={busyId === order.id}
                   />
                 </div>
               ))}
@@ -609,10 +632,10 @@ export default function DeliveryManager() {
           {/* Map */}
           <div className="flex-1 bg-white rounded-2xl shadow-sm border border-stone-100 p-1 min-h-[300px] relative">
             {googleMapsApiKey ? (
-              <GoogleDeliveryMap 
-                locations={mapLocations} 
-                routes={mapRoutes} 
-                apiKey={googleMapsApiKey} 
+              <GoogleDeliveryMap
+                locations={mapLocations}
+                routes={mapRoutes}
+                apiKey={googleMapsApiKey}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-stone-50 rounded-xl p-6 text-center">
@@ -620,7 +643,7 @@ export default function DeliveryManager() {
                 <h3 className="font-bold text-stone-700">Google Maps não configurado</h3>
                 <p className="text-sm text-stone-500 mb-4">Adicione VITE_GOOGLE_MAPS_API_KEY ao seu arquivo .env para habilitar o mapa.</p>
                 <div className="w-full h-48 rounded-lg overflow-hidden border border-stone-200">
-                   <DeliveryMap locations={mapLocations} routes={mapRoutes.map((r: any) => ({...r, color: 'purple'}))} />
+                  <DeliveryMap locations={mapLocations} routes={mapRoutes.map((r: any) => ({ ...r, color: 'purple' }))} />
                 </div>
                 <p className="text-xs text-stone-400 mt-2">Usando OpenStreetMap como fallback</p>
               </div>
@@ -634,11 +657,16 @@ export default function DeliveryManager() {
               Entregadores
             </h3>
             <div className="space-y-3">
+              {couriers.length === 0 && (
+                <p className="text-xs text-stone-400 italic">Nenhum entregador cadastrado</p>
+              )}
               {couriers.map(courier => (
                 <div key={courier.id} className="flex items-center justify-between p-2 hover:bg-stone-50 rounded-lg transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <img src={courier.avatar} alt={courier.name} className="w-8 h-8 rounded-full bg-stone-200" referrerPolicy="no-referrer" />
+                      {courier.avatar
+                        ? <img src={courier.avatar} alt={courier.name} className="w-8 h-8 rounded-full bg-stone-200" referrerPolicy="no-referrer" />
+                        : <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold uppercase">{courier.name.charAt(0)}</div>}
                       <span className={cn(
                         "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
                         courier.isAvailable ? "bg-emerald-500" : "bg-red-500"
@@ -651,17 +679,19 @@ export default function DeliveryManager() {
                       </p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => toggleCourierAvailability(courier.id)}
-                    className={cn(
-                      "px-2 py-1 rounded text-xs font-bold transition-colors",
-                      courier.isAvailable 
-                        ? "bg-red-50 text-red-600 hover:bg-red-100" 
-                        : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                    )}
-                  >
-                    {courier.isAvailable ? 'Ocupar' : 'Liberar'}
-                  </button>
+                  {hasRole('admin', 'manager') && (
+                    <button
+                      onClick={() => toggleCourierAvailability(courier.id)}
+                      className={cn(
+                        "px-2 py-1 rounded text-xs font-bold transition-colors",
+                        courier.isAvailable
+                          ? "bg-red-50 text-red-600 hover:bg-red-100"
+                          : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                      )}
+                    >
+                      {courier.isAvailable ? 'Ocupar' : 'Liberar'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -670,7 +700,7 @@ export default function DeliveryManager() {
       </div>
       <AnimatePresence>
         {isChatOpen && selectedOrderForChat && (
-          <OrderChat 
+          <OrderChat
             orderId={selectedOrderForChat.id}
             customerName={selectedOrderForChat.customer}
             onClose={() => setIsChatOpen(false)}

@@ -1,0 +1,7 @@
+vendor/
+storage/
+certs/
+*.pfx
+*.p12
+docker-compose*.yml
+README.md

@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ShoppingCart, CreditCard, Banknote, QrCode, Trash2, Plus, Minus, X, CheckCircle, Printer, History, Clock } from 'lucide-react';
+import { Search, ShoppingCart, CreditCard, Banknote, QrCode, Trash2, Plus, Minus, X, CheckCircle, Printer, History, Clock, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { SalesStore, SoldItem } from '../lib/store';
+import { api } from '../lib/api';
 
 interface Product {
   id: string;
   name: string;
   price: number;
-  category: 'drinks' | 'food' | 'portions';
+  category: string;
   image?: string;
 }
 
@@ -16,65 +16,106 @@ interface CartItem extends Product {
   quantity: number;
 }
 
-const PRODUCTS: Product[] = [
-  { id: '1', name: 'Heineken 600ml', price: 18.00, category: 'drinks' },
-  { id: '2', name: 'Gin Tônica', price: 32.00, category: 'drinks' },
-  { id: '3', name: 'Caipirinha', price: 25.00, category: 'drinks' },
-  { id: '4', name: 'Água s/ Gás', price: 6.00, category: 'drinks' },
-  { id: '5', name: 'Coca-Cola', price: 8.00, category: 'drinks' },
-  { id: '6', name: 'Batata Frita', price: 28.00, category: 'portions' },
-  { id: '7', name: 'Isca de Frango', price: 35.00, category: 'portions' },
-  { id: '8', name: 'Hambúrguer Clássico', price: 38.00, category: 'food' },
-  { id: '9', name: 'Pizza Margherita', price: 45.00, category: 'food' },
-];
-
 export default function POS() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<'all' | 'drinks' | 'food' | 'portions'>('all');
+  const [category, setCategory] = useState<string>('all');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [generatedCodes, setGeneratedCodes] = useState<SoldItem[]>([]);
-  const [recentSales, setRecentSales] = useState<SoldItem[]>([]);
+  const [generatedCodes, setGeneratedCodes] = useState<any[]>([]);
+  const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [printMessage, setPrintMessage] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [paymentError, setPaymentError] = useState('');
 
-  const filteredProducts = PRODUCTS.filter(p => 
+  const loadProducts = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const data = await api.getProducts();
+      setProducts((Array.isArray(data) ? data : []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        category: p.category_name || 'Outros',
+        image: p.image || undefined,
+      })));
+    } catch (e: any) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadProducts(); }, []);
+
+  const categoryList = ['all', ...Array.from(new Set(products.map(p => p.category)))];
+  const filteredProducts = products.filter(p =>
     (category === 'all' || p.category === category) &&
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openHistory = () => {
-    const items = SalesStore.getItems().reverse(); // Show newest first
-    setRecentSales(items);
+  const isDrink = (p: Product) => /bebida|drink|cerveja|destilado/i.test(p.category);
+
+  const openHistory = async () => {
     setIsHistoryOpen(true);
+    try {
+      const res = await api.getTokens();
+      setRecentSales((Array.isArray(res) ? res : []).map((t: any) => ({
+        code: t.code,
+        itemName: t.item_name,
+        price: Number(t.price) || 0,
+        purchaseTime: new Date(t.created_at).toLocaleString('pt-BR'),
+        status: t.status,
+        type: t.type,
+      })));
+    } catch (e: any) {
+      setRecentSales([]);
+      setPaymentError(e.message || 'Falha ao carregar histórico');
+    }
   };
 
-  const handlePayment = (method: 'card' | 'cash' | 'pix') => {
-    // Generate codes for each item in the cart
-    const newCodes: SoldItem[] = [];
-    
-    cart.forEach(item => {
-      for (let i = 0; i < item.quantity; i++) {
-        const code = Math.floor(1000 + Math.random() * 9000).toString();
-        const soldItem = {
-          code,
-          itemName: item.name,
-          price: item.price,
-          type: item.category === 'drinks' ? 'token' as const : 'ticket' as const, // Simplified logic
-          purchaseTime: new Date().toLocaleString('pt-BR'),
-          status: 'valid' as const
-        };
-        
-        // Save to store
-        const savedItem = SalesStore.addItem(soldItem);
-        newCodes.push(savedItem);
-      }
-    });
+  const handlePayment = async (method: 'card' | 'cash' | 'pix') => {
+    setIsProcessing(true);
+    setPaymentError('');
+    try {
+      const items = cart.map(item => ({
+        product_id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        type: isDrink(item) ? 'token' : 'ticket',
+      }));
 
-    setGeneratedCodes(newCodes);
-    setIsPaymentModalOpen(false);
-    setIsSuccessModalOpen(true);
-    setCart([]); // Clear cart
+      const res = await api.sellTokens({ items, payment_method: method });
+      setGeneratedCodes((res.codes || []).map((c: any) => ({
+        code: c.code,
+        itemName: c.item_name,
+        price: Number(c.price) || 0,
+        type: 'token' as const,
+      })));
+      setPrintMessage(res.print_jobs?.length ? 'Fichas enviadas para a fila de impressão.' : 'Impressão automática desativada. Use Reimprimir para enviar.');
+      setIsPaymentModalOpen(false);
+      setIsSuccessModalOpen(true);
+      setCart([]);
+    } catch (e: any) {
+      setPaymentError(e.message || 'Falha ao processar pagamento');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const printGeneratedCodes = async () => {
+    setIsProcessing(true);
+    try {
+      await Promise.all(generatedCodes.map(item => api.printToken(item.code)));
+      setPrintMessage('Fichas enviadas para a fila de impressão.');
+    } catch (e: any) { setPrintMessage(e.message || 'Falha ao enviar para impressão.'); }
+    finally { setIsProcessing(false); }
   };
 
   const addToCart = (product: Product) => {
@@ -105,15 +146,15 @@ export default function POS() {
   const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-stone-50 overflow-hidden">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] bg-stone-50 lg:overflow-hidden">
       {/* Product Selection Area */}
-      <div className="flex-1 flex flex-col p-6 gap-6">
-        <div className="flex justify-between items-center">
+      <div className="flex-1 flex flex-col p-3 md:p-6 gap-4 md:gap-6 min-w-0">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold font-display text-stone-900">Ponto de Venda</h1>
             <p className="text-stone-500">Selecione os produtos para adicionar ao pedido</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full md:w-auto">
             <button 
               onClick={openHistory}
               className="p-3 rounded-xl bg-white border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors shadow-sm"
@@ -121,7 +162,7 @@ export default function POS() {
             >
               <History className="w-5 h-5" />
             </button>
-            <div className="relative w-80">
+            <div className="relative flex-1 md:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
               <input 
                 type="text" 
@@ -136,25 +177,37 @@ export default function POS() {
 
         {/* Categories */}
         <div className="flex gap-2 pb-2 overflow-x-auto">
-          {['all', 'drinks', 'food', 'portions'].map((cat) => (
+          {categoryList.map((cat) => (
             <button
               key={cat}
-              onClick={() => setCategory(cat as any)}
+              onClick={() => setCategory(cat)}
               className={cn(
-                "px-6 py-2 rounded-full text-sm font-bold capitalize transition-all",
-                category === cat 
-                  ? "bg-stone-900 text-white shadow-md" 
+                "px-6 py-2 rounded-full text-sm font-bold capitalize transition-all whitespace-nowrap",
+                category === cat
+                  ? "bg-stone-900 text-white shadow-md"
                   : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"
               )}
             >
-              {cat === 'all' ? 'Todos' : cat === 'drinks' ? 'Bebidas' : cat === 'food' ? 'Lanches' : 'Porções'}
+              {cat === 'all' ? 'Todos' : cat}
             </button>
           ))}
         </div>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pb-20">
-          {filteredProducts.map((product) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 lg:overflow-y-auto pb-6 lg:pb-20">
+          {loading ? (
+            <div className="col-span-full flex flex-col items-center gap-3 text-stone-400 py-16">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-sm">Carregando produtos...</span>
+            </div>
+          ) : loadError ? (
+            <div className="col-span-full flex flex-col items-center gap-4 py-16 text-center">
+              <p className="text-sm text-red-600">{loadError}</p>
+              <button onClick={loadProducts} className="px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-medium">Tentar novamente</button>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="col-span-full text-center text-stone-400 py-16 text-sm">Nenhum produto encontrado</div>
+          ) : filteredProducts.map((product) => (
             <motion.button
               key={product.id}
               layoutId={`product-${product.id}`}
@@ -178,7 +231,7 @@ export default function POS() {
       </div>
 
       {/* Cart Sidebar */}
-      <div className="w-96 bg-white border-l border-stone-200 flex flex-col shadow-xl z-20">
+      <div className="w-full lg:w-96 bg-white border-t lg:border-t-0 lg:border-l border-stone-200 flex flex-col shadow-xl z-20 min-h-[420px] lg:min-h-0">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h2 className="text-xl font-bold font-display flex items-center gap-2">
             <ShoppingCart className="w-5 h-5" />
@@ -243,11 +296,11 @@ export default function POS() {
           </div>
           
           <button 
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || isProcessing}
             onClick={() => setIsPaymentModalOpen(true)}
             className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-lg hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-stone-900/20 flex items-center justify-center gap-2"
           >
-            Finalizar Venda
+            {isProcessing ? 'Processando...' : 'Finalizar Venda'}
           </button>
         </div>
       </div>
@@ -287,6 +340,12 @@ export default function POS() {
               <div className="p-6 bg-stone-50 text-center border-t border-stone-100">
                 <p className="text-stone-500 mb-2">Total a pagar</p>
                 <p className="text-4xl font-bold font-mono text-stone-900">R$ {total.toFixed(2)}</p>
+                {paymentError && (
+                  <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl p-3">
+                    {paymentError}
+                    <button onClick={() => setIsPaymentModalOpen(false)} className="ml-2 underline font-bold">fechar</button>
+                  </p>
+                )}
               </div>
             </motion.div>
           </div>
@@ -309,6 +368,7 @@ export default function POS() {
                 </div>
                 <h2 className="text-2xl font-bold font-display text-stone-900 mb-2">Venda Realizada!</h2>
                 <p className="text-stone-500 mb-8">Fichas geradas com sucesso.</p>
+                {printMessage && <p className="text-sm bg-blue-50 text-blue-700 border border-blue-100 rounded-xl p-3 mb-4">{printMessage}</p>}
 
                 <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100 mb-8 max-h-60 overflow-y-auto">
                   {generatedCodes.map((item, index) => (
@@ -332,11 +392,12 @@ export default function POS() {
                     Fechar
                   </button>
                   <button 
-                    onClick={() => window.print()}
+                    onClick={printGeneratedCodes}
+                    disabled={isProcessing}
                     className="flex-1 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors flex items-center justify-center gap-2"
                   >
                     <Printer className="w-4 h-4" />
-                    Imprimir
+                    {isProcessing ? 'Enviando...' : 'Reimprimir'}
                   </button>
                 </div>
               </div>

@@ -1,0 +1,28 @@
+{
+    "name": "woobar/fiscal-sidecar",
+    "description": "Sidecar interno de emissao de NFC-e baseado em nfephp-org/sped-nfe",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.2",
+        "ext-curl": "*",
+        "ext-dom": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "ext-soap": "*",
+        "ext-xml": "*",
+        "ext-zip": "*",
+        "nfephp-org/sped-nfe": "^5.0"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
+    },
+    "scripts": {
+        "serve": "php -S 0.0.0.0:8080 -t public"
+    }
+}

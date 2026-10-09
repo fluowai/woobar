@@ -14,16 +14,45 @@ import {
   Users,
   Armchair,
   Store,
-  ScanLine
+  ScanLine,
+  Package,
+  BarChart3,
+  Globe,
+  HeartHandshake,
+  MessageCircle,
+  Megaphone,
+  LogOut,
+  TabletSmartphone
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../lib/auth';
 import { motion, AnimatePresence } from 'motion/react';
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: 'Super Admin',
+  admin: 'Administrador',
+  manager: 'Gerente',
+  waiter: 'Garçom',
+  kitchen: 'Cozinha',
+  pantry: 'Copa',
+  courier: 'Entregador',
+  attendant: 'Atendente',
+};
+
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: string[];
+  subItems?: { path: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
+}
 
 export default function MainLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const { user, logout, hasRole } = useAuth();
   const location = useLocation();
 
-  const navSections = [
+  const navSections: { title: string; items: NavItem[] }[] = [
     {
       title: 'VISÃO GERAL',
       items: [
@@ -33,12 +62,15 @@ export default function MainLayout() {
     {
       title: 'OPERAÇÃO',
       items: [
-        { path: '/pos', label: 'Ponto de Venda', icon: Store },
-        { path: '/tables', label: 'Gestão de Mesas', icon: Armchair },
-        { 
-          path: '/delivery', 
-          label: 'Delivery & Logística', 
+        { path: '/pos', label: 'Ponto de Venda', icon: Store, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/totem', label: 'Autoatendimento Totem', icon: TabletSmartphone },
+        { path: '/tables', label: 'Gestão de Mesas', icon: Armchair, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/kds', label: 'Cozinha (KDS)', icon: ChefHat, roles: ['admin', 'manager', 'kitchen', 'waiter', 'pantry'] },
+        {
+          path: '/delivery',
+          label: 'Delivery & Logística',
           icon: Bike,
+          roles: ['admin', 'manager', 'waiter', 'attendant', 'kitchen', 'courier'],
           subItems: [
             { path: '/delivery', label: 'Novo Pedido', icon: ShoppingBag },
             { path: '/delivery/manage', label: 'Gestão (Cozinha)', icon: ChefHat },
@@ -51,25 +83,58 @@ export default function MainLayout() {
     {
       title: 'CONSUMO',
       items: [
-        { path: '/bar', label: 'Bar & Fichas', icon: Beer },
-        { path: '/events', label: 'Eventos & Ingressos', icon: Ticket },
+        { path: '/bar', label: 'Bar & Fichas', icon: Beer, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/events', label: 'Eventos & Ingressos', icon: Ticket, roles: ['admin', 'manager', 'waiter', 'attendant'] },
       ]
     },
     {
       title: 'FINANCEIRO',
       items: [
-        { path: '/cover', label: 'Couvert Artístico', icon: Music2 },
+        { path: '/cover', label: 'Couvert Artístico', icon: Music2, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+      ]
+    },
+    {
+      title: 'ESTOQUE & CUSTOS',
+      items: [
+        { path: '/inventory', label: 'Estoque & Insumos', icon: Package, roles: ['admin', 'manager', 'pantry', 'kitchen'] },
+      ]
+    },
+    {
+      title: 'CRM',
+      items: [
+        { path: '/customers', label: 'Clientes & Fidelidade', icon: HeartHandshake, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/marketing', label: 'Marketing & Growth', icon: Megaphone, roles: ['admin', 'manager'] },
+      ]
+    },
+    {
+      title: 'CANAL DE VENDAS',
+      items: [
+        { path: '/channels', label: 'Marketplace Canais', icon: Globe, roles: ['admin', 'manager'] },
+        { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+      ]
+    },
+    {
+      title: 'RELATÓRIOS',
+      items: [
+        { path: '/reports', label: 'BI & Indicadores', icon: BarChart3, roles: ['admin', 'manager'] },
       ]
     },
     {
       title: 'GESTÃO',
       items: [
-        { path: '/users', label: 'Equipe & Acessos', icon: Users },
+        { path: '/users', label: 'Equipe & Acessos', icon: Users, roles: ['admin'] },
       ]
     }
-  ];
+  ]
+    // Filtra itens que o papel atual não pode acessar (superadmin vê tudo)
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => !item.roles || hasRole(...item.roles)),
+    }))
+    .filter(section => section.items.length > 0);
 
   const isDeliveryActive = location.pathname.startsWith('/delivery');
+  const handleLogout = () => { logout(); };
 
   return (
     <div className="flex h-screen bg-stone-50 text-stone-900 overflow-hidden">
@@ -114,6 +179,7 @@ export default function MainLayout() {
                             key={sub.path}
                             to={sub.path}
                             end
+                            onClick={() => setIsMobileMenuOpen(false)}
                             className={({ isActive }) =>
                               cn(
                                 "flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors",
@@ -136,10 +202,26 @@ export default function MainLayout() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-stone-100">
-          <button className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium">
+        <div className="p-4 border-t border-stone-100 space-y-1">
+          {user && (
+            <div className="flex items-center gap-3 px-4 py-2 mb-1">
+              <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-sm font-bold uppercase">
+                {user.name?.charAt(0) || '?'}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-stone-800 truncate">{user.name}</p>
+                <p className="text-xs text-stone-400">{ROLE_LABELS[user.role] || user.role}</p>
+              </div>
+            </div>
+          )}
+          <NavLink to="/settings/printing" className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium">
             <Settings className="w-4 h-4" />
-            <span>Configurações</span>
+            <span>Impressão</span>
+          </NavLink>
+          <button onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-red-500 hover:bg-red-50 transition-colors text-sm font-medium">
+            <LogOut className="w-4 h-4" />
+            <span>Sair</span>
           </button>
         </div>
       </aside>
@@ -216,6 +298,14 @@ export default function MainLayout() {
                 </div>
               ))}
             </nav>
+          {/* Mobile Logout */}
+          <div className="pt-6 border-t border-stone-100">
+            <button onClick={handleLogout}
+              className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-red-500 hover:bg-red-50 transition-colors text-sm font-medium">
+              <LogOut className="w-4 h-4" />
+              <span>Sair</span>
+            </button>
+          </div>
           </motion.div>
         )}
       </AnimatePresence>
