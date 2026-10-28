@@ -12,6 +12,13 @@ function optionalEnv(name: string, defaultValue: string): string {
   return process.env[name] || defaultValue;
 }
 
+function validateProductionUrl(name: string, value: string): string {
+  if (process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/i.test(value)) {
+    throw new Error(`A variável ${name} não pode apontar para localhost em produção`);
+  }
+  return value;
+}
+
 export const env = {
   PORT: parseInt(optionalEnv('PORT', '3001'), 10),
   JWT_SECRET: (() => {
@@ -27,7 +34,7 @@ export const env = {
   })(),
   GEMINI_API_KEY: optionalEnv('GEMINI_API_KEY', ''),
   DATABASE_PATH: optionalEnv('DATABASE_PATH', './data/woobar.db'),
-  APP_URL: optionalEnv('APP_URL', 'http://localhost:3000'),
+  APP_URL: validateProductionUrl('APP_URL', optionalEnv('APP_URL', 'http://localhost:3000')),
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
-  CORS_ORIGIN: optionalEnv('CORS_ORIGIN', 'http://localhost:3000'),
+  CORS_ORIGIN: validateProductionUrl('CORS_ORIGIN', optionalEnv('CORS_ORIGIN', 'http://localhost:3000')),
 };

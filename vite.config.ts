@@ -11,6 +11,17 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-router-dom'],
+            maps: ['leaflet', 'react-leaflet', '@react-google-maps/api'],
+            motion: ['motion'],
+          },
+        },
+      },
+    },
     server: {
       proxy: {
         '/api': {
