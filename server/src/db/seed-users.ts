@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-const SUPER_PASS = 'Super1234';
+const SUPER_PASS = 'Wb!-vbX6RsqJoq7JyK0#9';
 const ADMIN_PASS = 'admin123';
 const STAFF_PASS = '123456';
 
