@@ -26,7 +26,6 @@ import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../lib/auth';
 import { autoDispatch, getDistanceFromLatLonInKm } from '../lib/dispatchSystem';
-import type { User } from '../data/users';
 
 type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered';
 type SortOption = 'time' | 'value';
@@ -85,16 +84,6 @@ const getOrderPriority = (timeStr: string): 'normal' | 'warning' | 'late' => {
   if (minutes >= 50) return 'late';
   if (minutes >= 30) return 'warning';
   return 'normal';
-};
-
-const getTimeSince = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'agora';
-  if (diffMins < 60) return `${diffMins} min`;
-  return `${Math.floor(diffMins / 60)}h`;
 };
 
 const calculateETA = (order: Order, courier?: User) => {
