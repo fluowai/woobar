@@ -15,9 +15,7 @@
 
 services:
   woobar:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/fluowai/woobar:main
     container_name: woobar
     restart: unless-stopped
     expose:

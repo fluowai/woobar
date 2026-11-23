@@ -28,7 +28,16 @@ Não coloque credenciais do Supabase, banco, JWT ou fiscal no arquivo versionado
 
 ## Deploy e verificação
 
-Use o `docker-compose.yml` deste repositório como arquivo da stack. A rede está configurada como externa com o nome exato `woo-network`.
+Use o `docker-compose.yml` deste repositório como arquivo da stack. A imagem publicada é:
+
+```text
+ghcr.io/fluowai/woobar:main
+```
+
+Página do pacote no GitHub:
+https://github.com/fluowai/woobar/pkgs/container/woobar
+
+A rede está configurada como externa com o nome exato `woo-network`.
 
 ```bash
 curl -fsS https://woobar.wootech.com.br/api/health
