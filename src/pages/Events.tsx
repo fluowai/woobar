@@ -4,44 +4,22 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { api } from '../lib/api';
 
-const EVENTS = [
-  {
-    id: 1,
-    title: 'Samba de Domingo',
-    date: '12 Nov 2023',
-    time: '16:00',
-    location: 'Palco Principal',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Pista', price: 30.00, available: 120 },
-      { id: 'vip', name: 'Área VIP', price: 80.00, available: 45 },
-    ]
-  },
-  {
-    id: 2,
-    title: 'Noite de Jazz',
-    date: '15 Nov 2023',
-    time: '20:00',
-    location: 'Lounge Bar',
-    image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Entrada', price: 50.00, available: 80 },
-      { id: 'table', name: 'Mesa (4 lugares)', price: 250.00, available: 10 },
-    ]
-  },
-  {
-    id: 3,
-    title: 'Rock Classics',
-    date: '18 Nov 2023',
-    time: '21:00',
-    location: 'Palco Principal',
-    image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=800&q=80',
-    tickets: [
-      { id: 'gen', name: 'Pista', price: 40.00, available: 200 },
-      { id: 'vip', name: 'Camarote', price: 100.00, available: 30 },
-    ]
-  }
-];
+interface EventTicket {
+  id: string;
+  name: string;
+  price: number;
+  available: number;
+}
+
+interface EventData {
+  id: number;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  image: string;
+  tickets: EventTicket[];
+}
 
 export default function Events() {
   const [events, setEvents] = useState<any[]>(EVENTS);
@@ -76,9 +54,16 @@ export default function Events() {
     finally { setBusy(false); }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
-      {/* Events List */}
       <div className="flex-1 overflow-y-auto pr-2">
         <h2 className="text-2xl font-bold font-display text-stone-900 mb-6">Próximos Eventos</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -116,13 +101,25 @@ export default function Events() {
                     {event.location}
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                <div className="p-5">
+                  <h3 className="text-xl font-bold text-stone-900 mb-2">{event.title}</h3>
+                  <div className="space-y-2 text-sm text-stone-500">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-orange-500" />
+                      {event.time}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-orange-500" />
+                      {event.location}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Ticket Sales Sidebar */}
       <AnimatePresence>
         {selectedEvent && (
           <motion.div
@@ -151,7 +148,7 @@ export default function Events() {
                 <div key={ticket.id} className="flex justify-between items-center p-4 bg-stone-50 rounded-xl border border-stone-100">
                   <div>
                     <p className="font-bold text-stone-900">{ticket.name}</p>
-                    <p className="text-sm text-stone-500">R$ {ticket.price.toFixed(2)}</p>
+                    <p className="text-sm text-stone-500">R$ {Number(ticket.price).toFixed(2)}</p>
                     <p className="text-xs text-orange-600 mt-1">{ticket.available} disponíveis</p>
                   </div>
                   <div className="flex items-center gap-3 bg-white rounded-lg border border-stone-200 p-1">

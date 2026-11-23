@@ -4,6 +4,9 @@ import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useMenu } from '../hooks/useMenu';
+import { useOrders } from '../hooks/useOrders';
+import type { MenuItem } from '../lib/database.types';
 
 type MenuItem = { id: string; name: string; description: string | null; price: number; image: string | null; category_name: string | null };
 

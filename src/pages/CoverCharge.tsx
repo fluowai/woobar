@@ -123,11 +123,17 @@ export default function CoverCharge() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Loader2 className="w-8 h-8 text-stone-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-8rem)] gap-6">
-      {/* Main Control Panel */}
       <div className="flex-1 flex flex-col gap-6">
-        {/* Occupancy Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-8 flex flex-col items-center justify-center relative overflow-hidden flex-1 min-h-[300px]">
           <div className={`absolute top-0 left-0 w-full h-2 ${statusColor}`} />
 
@@ -158,7 +164,7 @@ export default function CoverCharge() {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-6xl font-bold font-display text-stone-900">{count}</span>
-              <span className="text-stone-400 font-medium">/ {capacity}</span>
+              <span className="text-stone-400 font-medium">/ {CAPACITY}</span>
             </div>
           </div>
 
@@ -176,14 +182,13 @@ export default function CoverCharge() {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-6 h-32">
           <button
             onClick={handleCheckOut}
             disabled={busy || count <= 0}
             className="bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 border-2 border-transparent hover:border-stone-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <UserMinus className="w-8 h-8" />
+            {processing ? <Loader2 className="w-8 h-8 animate-spin" /> : <UserMinus className="w-8 h-8" />}
             <span className="text-lg font-bold">Registrar Saída</span>
           </button>
 
@@ -192,13 +197,12 @@ export default function CoverCharge() {
             disabled={busy || count >= capacity}
             className="bg-stone-900 hover:bg-stone-800 text-white rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-stone-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <UserPlus className="w-8 h-8" />
+            {processing ? <Loader2 className="w-8 h-8 animate-spin" /> : <UserPlus className="w-8 h-8" />}
             <span className="text-lg font-bold">Registrar Entrada</span>
           </button>
         </div>
       </div>
 
-      {/* Settings & History Sidebar */}
       <div className="w-full lg:w-96 bg-white rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full overflow-hidden">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h3 className="font-bold text-lg flex items-center gap-2">
@@ -209,7 +213,6 @@ export default function CoverCharge() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-8">
-            {/* Price Setting */}
             <div>
               <label className="block text-sm font-medium text-stone-500 mb-2">Valor do Couvert</label>
               <div className="flex items-center gap-4">
@@ -232,7 +235,6 @@ export default function CoverCharge() {
               {priceDirty && <p className="text-xs text-orange-500 mt-2">Salvando alteração...</p>}
             </div>
 
-            {/* Payment Method */}
             <div>
               <label className="block text-sm font-medium text-stone-500 mb-2">Forma de Pagamento</label>
               <div className="grid grid-cols-2 gap-3">
@@ -259,7 +261,6 @@ export default function CoverCharge() {
               </div>
             </div>
 
-            {/* Transaction History */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <label className="block text-sm font-medium text-stone-500">Últimas Transações</label>

@@ -12,6 +12,7 @@ import {
   ChefHat,
   Bike,
   Users,
+  User,
   Armchair,
   Store,
   ScanLine,
@@ -28,6 +29,7 @@ import {
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Super Admin',
@@ -52,16 +54,43 @@ export default function MainLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { user, logout, hasRole } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navSections: { title: string; items: NavItem[] }[] = [
     {
       title: 'VISÃO GERAL',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/', label: 'Dashboard', icon: LayoutDashboard }
       ]
     },
     {
+      title: 'MEGA ADMIN',
+      roles: ['mega_admin'],
+      items: [
+        { path: '/resellers', label: 'Gestão de Revendas', icon: Globe }
+      ]
+    },
+    {
+      title: 'SAAS ADMIN',
+      roles: ['mega_admin', 'super_admin'],
+      items: [
+        { path: '/tenants', label: 'Gestão de Restaurantes', icon: Store },
+        { path: '/saas-users', label: 'Usuários SaaS', icon: Users },
+        { path: '/support-admin', label: 'Chamados (Suporte)', icon: MessageSquare }
+      ]
+    },
+    {
+      title: 'ATENDIMENTO',
+      roles: ['waiter', 'tenant_admin', 'manager', 'admin'],
+      items: [
+        { path: '/waiter', label: 'Mesas (Garçom)', icon: Armchair },
+      ]
+    },
+    {
       title: 'OPERAÇÃO',
+      roles: ['tenant_admin', 'manager', 'admin', 'cashier', 'waiter'],
       items: [
         { path: '/pos', label: 'Ponto de Venda', icon: Store, roles: ['admin', 'manager', 'waiter', 'attendant'] },
         { path: '/totem', label: 'Autoatendimento Totem', icon: TabletSmartphone },
@@ -82,7 +111,15 @@ export default function MainLayout() {
       ]
     },
     {
+      title: 'COZINHA',
+      roles: ['kitchen'],
+      items: [
+        { path: '/delivery/manage', label: 'Painel da Cozinha', icon: ChefHat },
+      ]
+    },
+    {
       title: 'CONSUMO',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/bar', label: 'Bar & Fichas', icon: Beer, roles: ['admin', 'manager', 'waiter', 'attendant'] },
         { path: '/events', label: 'Eventos & Ingressos', icon: Ticket, roles: ['admin', 'manager', 'waiter', 'attendant'] },
@@ -90,6 +127,7 @@ export default function MainLayout() {
     },
     {
       title: 'FINANCEIRO',
+      roles: ['tenant_admin', 'manager', 'admin'],
       items: [
         { path: '/cover', label: 'Couvert Artístico', icon: Music2, roles: ['admin', 'manager', 'waiter', 'attendant'] },
         { path: '/fiscal', label: 'Fiscal & NFC-e', icon: FileText, roles: ['admin', 'manager'] },
@@ -123,7 +161,8 @@ export default function MainLayout() {
       ]
     },
     {
-      title: 'GESTÃO',
+      title: 'GESTÃO & CONFIG',
+      roles: ['tenant_admin', 'admin'],
       items: [
         { path: '/users', label: 'Equipe & Acessos', icon: Users, roles: ['admin'] },
       ]
@@ -135,6 +174,8 @@ export default function MainLayout() {
       items: section.items.filter(item => !item.roles || hasRole(...item.roles)),
     }))
     .filter(section => section.items.length > 0);
+
+  const navSections = allNavSections.filter(section => hasRole(section.roles));
 
   const isDeliveryActive = location.pathname.startsWith('/delivery');
   const handleLogout = () => { logout(); };
@@ -318,11 +359,39 @@ export default function MainLayout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 bg-stone-50/50">
+      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 bg-stone-50/50 pb-20 md:pb-0">
         <div className="max-w-7xl mx-auto p-4 md:p-8">
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 z-30 pb-safe">
+        <div className="grid grid-cols-4 gap-1 px-2 py-2 max-w-md mx-auto">
+          {[
+            { path: '/', icon: LayoutDashboard, label: 'Home' },
+            { path: '/pos', icon: Store, label: 'PDV' },
+            { path: '/delivery', icon: Bike, label: 'Delivery' },
+            { path: '/waiter', icon: Armchair, label: 'Mesas' },
+          ].map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-col items-center justify-center py-2 rounded-xl transition-colors",
+                  isActive
+                    ? "text-orange-600 bg-orange-50"
+                    : "text-stone-500 hover:text-stone-900"
+                )
+              }
+            >
+              <item.icon className="w-5 h-5 mb-1" />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }

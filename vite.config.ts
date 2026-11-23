@@ -54,6 +54,23 @@ export default defineConfig(() => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      headers: {
+        'Service-Worker-Allowed': '/',
+      },
+    },
+    build: {
+      // Otimizações para PWA
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-ui': ['lucide-react', 'motion'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+          },
+        },
+      },
+      // Chunks menores para mobile
+      chunkSizeWarningLimit: 500,
     },
   };
 });

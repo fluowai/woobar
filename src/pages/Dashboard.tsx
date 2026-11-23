@@ -26,7 +26,8 @@ const StatCard = ({ title, value, icon: Icon, color, loading }: any) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100"
+    onClick={onClick}
+    className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 cursor-pointer hover:shadow-md transition-all"
   >
     <div className="flex justify-between items-start mb-4">
       <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>

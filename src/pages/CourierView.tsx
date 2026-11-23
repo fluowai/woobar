@@ -138,24 +138,26 @@ export default function CourierView() {
               <span className="font-mono font-medium text-stone-500">{order.displayId}</span>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <div className="flex items-start gap-3 text-stone-600">
-                <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm leading-tight">{order.address}</p>
+              <div className="space-y-3 mb-6">
+                <div className="flex items-start gap-3 text-stone-600">
+                  <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm leading-tight">{order.address}</p>
+                </div>
+                {order.phone && (
+                  <div className="flex items-center gap-3 text-stone-600">
+                    <Phone className="w-5 h-5 text-stone-400 flex-shrink-0" />
+                    <p className="text-sm">{order.phone}</p>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3 text-stone-600">
-                <Phone className="w-5 h-5 text-stone-400 flex-shrink-0" />
-                <p className="text-sm">{order.phone}</p>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl mb-4">
-              <span className="text-xs font-bold text-stone-400 uppercase">Cobrar na entrega</span>
-              <div className="text-right">
-                <p className="font-bold text-stone-900">R$ {order.total.toFixed(2)}</p>
-                <p className="text-xs text-stone-500">{order.payment}</p>
+              <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl mb-4">
+                <span className="text-xs font-bold text-stone-400 uppercase">Cobrar na entrega</span>
+                <div className="text-right">
+                  <p className="font-bold text-stone-900">R$ {Number(order.total).toFixed(2)}</p>
+                  <p className="text-xs text-stone-500">{order.paymentMethod || 'Não definido'}</p>
+                </div>
               </div>
-            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <button

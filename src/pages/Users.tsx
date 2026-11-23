@@ -133,6 +133,22 @@ export default function UsersPage() {
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleCopyInvite = () => {
+    const baseUrl = `${window.location.origin}/login`;
+    navigator.clipboard?.writeText(`Crie sua conta Woobar e entre na equipe: ${baseUrl}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stone-900"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
