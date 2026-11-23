@@ -72,9 +72,7 @@ services:
       - woo-network
 
   fiscal:
-    build:
-      context: ./fiscal
-      dockerfile: Dockerfile
+    image: ghcr.io/fluowai/woobar-fiscal:main
     container_name: woobar-fiscal
     restart: unless-stopped
     environment:
