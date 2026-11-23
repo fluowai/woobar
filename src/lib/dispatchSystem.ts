@@ -1,4 +1,4 @@
-import type { User } from '../data/users';
+import { User } from '../data/users';
 
 export interface Order {
   id: string;
@@ -8,14 +8,16 @@ export interface Order {
   status: 'pending' | 'preparing' | 'ready' | 'delivering' | 'delivered';
   time: string;
   address: string;
-  location?: { lat: number; lng: number };
+  location?: { lat: number; lng: number }; // Mock location
   courierId?: string;
 }
 
+// Mock store location (São Paulo center)
 const STORE_LOCATION = { lat: -23.550520, lng: -46.633308 };
 
+// Calculate distance between two points (Haversine formula approximation)
 export function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371;
+  const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
@@ -23,7 +25,7 @@ export function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: numb
     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const d = R * c;
+  const d = R * c; // Distance in km
   return d;
 }
 
@@ -38,6 +40,7 @@ export function autoDispatch(orders: Order[], couriers: User[]) {
   const assignments: { orderId: string; courierId: string }[] = [];
   const potentialMatches: { courierId: string; orderId: string; distance: number }[] = [];
 
+  // 1. Calculate all possible matches and their distances
   availableCouriers.forEach(courier => {
     readyOrders.forEach(order => {
       if (order.location && courier.currentLocation) {
@@ -56,8 +59,12 @@ export function autoDispatch(orders: Order[], couriers: User[]) {
     });
   });
 
+  // 2. Sort by distance (closest first) - Global Optimization
+  // This ensures that we prioritize the absolute closest pairs first, 
+  // rather than just iterating through couriers one by one.
   potentialMatches.sort((a, b) => a.distance - b.distance);
 
+  // 3. Assign
   const assignedOrderIds = new Set<string>();
   const assignedCourierIds = new Set<string>();
 

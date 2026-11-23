@@ -23,7 +23,7 @@ export default function Validation() {
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleValidate = async (e: React.FormEvent) => {
+  const handleValidate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
 
@@ -63,13 +63,6 @@ export default function Validation() {
           message: 'Erro ao validar código',
         });
       }
-    } catch (err) {
-      console.error('Error validating code:', err);
-      setResult({
-        status: 'invalid',
-        message: 'Erro ao validar código',
-      });
-    } finally {
       setIsLoading(false);
       setCode('');
       setTimeout(() => inputRef.current?.focus(), 50);

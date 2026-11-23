@@ -123,6 +123,7 @@ export default function BarTokens() {
         )}
       </div>
 
+      {/* Transaction Sidebar */}
       <div className="w-full lg:w-96 bg-white rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full">
         <div className="p-6 border-b border-stone-100 bg-stone-50/50">
           <h3 className="font-bold text-lg flex items-center gap-2">
