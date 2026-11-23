@@ -43,6 +43,11 @@ export const schemas = {
     price: z.number().positive(),
     category_id: z.string().optional(),
     image: z.string().optional(),
+    ncm: z.string().length(8, 'NCM deve ter 8 dígitos').optional().default('22030000'),
+    cfop: z.string().length(4, 'CFOP deve ter 4 dígitos').optional().default('5102'),
+    csosn: z.string().optional().default('102'),
+    origin: z.number().int().min(0).max(8).optional().default(0),
+    unit: z.string().optional().default('UN'),
   }),
 
   createOrder: z.object({
@@ -145,13 +150,64 @@ export const schemas = {
 
   addTableOrderItem: z.object({
     product_id: z.string().optional(),
-    product_name: z.string().min(1, 'Nome do produto é obrigatório'),
+    product_name: z.string().min(1, 'Nome do produto é obrigatório').optional(),
     quantity: z.number().int().positive('Quantidade deve ser positiva'),
-    price: z.number().positive('Preço deve ser positivo'),
+    price: z.number().positive('Preço deve ser positivo').optional(),
     notes: z.string().optional(),
+  }).refine((data) => !!data.product_id || (!!data.product_name && data.price !== undefined), {
+    message: 'Nome e preço são obrigatórios quando o produto não é do cardápio',
   }),
 
   validateCode: z.object({
     code: z.string().min(1, 'Código é obrigatório'),
+  }),
+
+  fiscalSettings: z.object({
+    environment: z.union([z.literal(1), z.literal(2)]).optional().default(2),
+    company_name: z.string().min(2, 'Razão social é obrigatória'),
+    fantasy_name: z.string().optional(),
+    cnpj: z.string().min(14, 'CNPJ deve ter 14 dígitos'),
+    ie: z.string().min(2, 'Inscrição Estadual é obrigatória'),
+    crt: z.number().int().min(1).max(3).optional().default(1),
+    uf: z.string().length(2, 'UF deve ter 2 letras'),
+    ibge_code: z.number().int().positive('Código IBGE inválido'),
+    city: z.string().min(2, 'Cidade é obrigatória'),
+    street: z.string().min(2, 'Logradouro é obrigatório'),
+    number: z.string().min(1, 'Número é obrigatório'),
+    complement: z.string().optional(),
+    neighborhood: z.string().min(1, 'Bairro é obrigatório'),
+    zip_code: z.string().min(8, 'CEP inválido'),
+    phone: z.string().optional(),
+    csc: z.string().min(1, 'CSC é obrigatório'),
+    csc_id: z.string().min(1, 'CSC ID é obrigatório'),
+    cert_pfx_base64: z.string().optional(),
+    cert_password: z.string().optional(),
+    serie: z.number().int().positive().optional().default(1),
+    auto_emit_on_closing: z.union([z.literal(0), z.literal(1), z.boolean()]).optional().default(0),
+  }),
+
+  emitNfce: z.object({
+    customer_cpf: z.string().optional(),
+    customer_name: z.string().optional(),
+  }),
+
+  cancelNfce: z.object({
+    justificativa: z.string().min(15, 'Justificativa deve ter no mínimo 15 caracteres').max(255),
+  }),
+
+  paymentSettings: z.object({
+    provider: z.enum(['mercadopago', 'mock']).optional().default('mercadopago'),
+    access_token: z.string().optional(),
+    public_key: z.string().optional(),
+    webhook_secret: z.string().optional(),
+    pix_key: z.string().optional(),
+    auto_approve_test: z.union([z.literal(0), z.literal(1), z.boolean()]).optional().default(0),
+    active: z.union([z.literal(0), z.literal(1), z.boolean()]).optional().default(1),
+  }),
+
+  createPixCharge: z.object({
+    payer_name: z.string().optional(),
+    payer_email: z.string().email().optional().or(z.literal('')),
+    payer_cpf: z.string().optional(),
   }),
 };

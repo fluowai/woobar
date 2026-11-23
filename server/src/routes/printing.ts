@@ -95,4 +95,77 @@ router.post('/ticket/:code', async (req: Request, res: Response) => {
   res.status(result.status === 'failed' ? 502 : 200).json(result);
 });
 
+router.post('/order/:id', async (req: Request, res: Response) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND establishment_id = ?').get(req.params.id, req.user!.establishment_id) as any;
+  if (!order) { res.status(404).json({ error: 'Pedido nao encontrado' }); return; }
+  const establishment = db.prepare('SELECT name FROM establishments WHERE id = ?').get(req.user!.establishment_id) as any;
+
+  let items: any[] = [];
+  try {
+    items = JSON.parse(order.items_json || '[]');
+  } catch {}
+
+  const lines: Array<{ label: string; value?: string }> = [];
+  lines.push({ label: 'Data', value: order.created_at || new Date().toLocaleString('pt-BR') });
+  lines.push({ label: 'Cliente', value: order.customer_name });
+  if (order.customer_phone) lines.push({ label: 'Telefone', value: order.customer_phone });
+  if (order.customer_address) lines.push({ label: 'Endereco', value: order.customer_address });
+  lines.push({ label: 'Canal', value: (order.channel || 'Balcao').toUpperCase() });
+  lines.push({ label: '--- ITENS ---' });
+
+  for (const it of items) {
+    const qty = it.quantity || 1;
+    const name = it.name || it.product_name || 'Item';
+    const price = it.price ? `R$ ${(qty * Number(it.price)).toFixed(2)}` : '';
+    lines.push({ label: `${qty}x ${name}`, value: price });
+    if (it.notes) lines.push({ label: ` Obs: ${it.notes}` });
+  }
+
+  lines.push({ label: '--- TOTAL ---' });
+  lines.push({ label: 'Total', value: `R$ ${Number(order.total).toFixed(2)}` });
+  if (order.payment_method) lines.push({ label: 'Pagamento', value: String(order.payment_method).toUpperCase() });
+
+  const result = await queuePrint(req.user!.establishment_id, 'order', order.id, {
+    establishment: establishment?.name || 'Woobar',
+    title: 'COMPROVANTE DE PEDIDO',
+    subtitle: `#${order.id.slice(0, 8).toUpperCase()}`,
+    lines,
+    footer: 'Obrigado pela preferencia!',
+  });
+  res.status(result.status === 'failed' ? 502 : 200).json(result);
+});
+
+router.post('/table-order/:id', async (req: Request, res: Response) => {
+  const order = db.prepare('SELECT * FROM table_orders WHERE id = ? AND establishment_id = ?').get(req.params.id, req.user!.establishment_id) as any;
+  if (!order) { res.status(404).json({ error: 'Comanda nao encontrada' }); return; }
+  const table = db.prepare('SELECT * FROM tables WHERE id = ?').get(order.table_id) as any;
+  const establishment = db.prepare('SELECT name FROM establishments WHERE id = ?').get(req.user!.establishment_id) as any;
+  const items = db.prepare('SELECT * FROM table_order_items WHERE table_order_id = ? AND status != ? ORDER BY created_at')
+    .all(order.id, 'cancelled') as any[];
+
+  const lines: Array<{ label: string; value?: string }> = [];
+  lines.push({ label: 'Mesa', value: table?.name || 'Mesa' });
+  if (order.customer_name) lines.push({ label: 'Cliente', value: order.customer_name });
+  lines.push({ label: 'Abertura', value: order.opened_at || '' });
+  lines.push({ label: '--- ITENS ---' });
+
+  for (const it of items) {
+    lines.push({ label: `${it.quantity}x ${it.product_name}`, value: `R$ ${(it.quantity * it.price).toFixed(2)}` });
+    if (it.notes) lines.push({ label: ` Obs: ${it.notes}` });
+  }
+
+  lines.push({ label: '--- TOTAL ---' });
+  lines.push({ label: 'Total', value: `R$ ${Number(order.total).toFixed(2)}` });
+  if (order.payment_method) lines.push({ label: 'Pagamento', value: String(order.payment_method).toUpperCase() });
+
+  const result = await queuePrint(req.user!.establishment_id, 'table_order', order.id, {
+    establishment: establishment?.name || 'Woobar',
+    title: order.status === 'closed' ? 'COMPROVANTE DE CONTA' : 'CONFERENCIA DE MESA',
+    subtitle: table?.name ? `Mesa: ${table.name}` : undefined,
+    lines,
+    footer: 'Nao e documento fiscal - Conferir consumo',
+  });
+  res.status(result.status === 'failed' ? 502 : 200).json(result);
+});
+
 export default router;

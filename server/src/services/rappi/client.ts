@@ -2,6 +2,7 @@ import { getAccessToken, clearToken } from './auth.js';
 import { RappiEvent, RappiOrderDetail, RappiOrdersResponse } from './types.js';
 import { logger } from '../../lib/logger.js';
 import db from '../../db/schema.js';
+import { assertSafeOutboundUrl } from '../../lib/url-security.js';
 
 const DEFAULT_API_URL = 'https://services.rappi.com.br';
 const INTEGRATIONS_PATH = '/api/v2/restaurants-integrations-public-api';
@@ -29,7 +30,8 @@ async function apiFetch<T>(
   if (!token) return null;
 
   try {
-    const res = await fetch(`${getApiUrl(channelId)}${path}`, {
+    const base = await assertSafeOutboundUrl(getApiUrl(channelId));
+    const res = await fetch(`${base.toString().replace(/\/$/, '')}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -59,7 +61,8 @@ async function apiAction(channelId: string, path: string, options: RequestInit =
   if (!token) return false;
 
   try {
-    const res = await fetch(`${getApiUrl(channelId)}${path}`, {
+    const base = await assertSafeOutboundUrl(getApiUrl(channelId));
+    const res = await fetch(`${base.toString().replace(/\/$/, '')}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,

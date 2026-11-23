@@ -71,6 +71,12 @@ export default function Login() {
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
 
+          <div className="pt-2 text-center">
+            <a href="/cadastrar" className="text-xs font-bold text-orange-600 hover:text-orange-700 hover:underline">
+              Quer usar o Woobar no seu bar ou restaurante? Comece grátis →
+            </a>
+          </div>
+
           <p className="text-xs text-stone-400 text-center mt-4">
             Woobar Management System
           </p>

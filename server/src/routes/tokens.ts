@@ -64,7 +64,21 @@ router.post('/validate', roleGuard('admin', 'manager', 'waiter', 'attendant', 'k
   const item = db.prepare('SELECT * FROM bar_tokens WHERE code = ? AND establishment_id = ?').get(code, req.user!.establishment_id) as any;
   if (!item) { res.json({ status: 'invalid', message: 'Código não encontrado' }); return; }
   if (item.status === 'used') { res.json({ status: 'used', message: 'Código já utilizado', details: { item: item.item_name, value: `R$ ${item.price.toFixed(2)}`, timestamp: item.created_at } }); return; }
-  db.prepare('UPDATE bar_tokens SET status = ? WHERE id = ?').run('used', item.id);
+  if (item.expires_at && new Date(item.expires_at).getTime() <= Date.now()) {
+    res.json({ status: 'expired', message: 'Código expirado' });
+    return;
+  }
+  const consumed = db.prepare(`
+    UPDATE bar_tokens
+    SET status = 'used', used_at = datetime('now'), used_by = ?
+    WHERE id = ? AND establishment_id = ? AND status = 'valid'
+  `).run(req.user!.id, item.id, req.user!.establishment_id);
+  if (consumed.changes !== 1) {
+    res.json({ status: 'used', message: 'Código já utilizado' });
+    return;
+  }
+  db.prepare('INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details_json) VALUES (?,?,?,?,?,?)')
+    .run(crypto.randomUUID(), req.user!.id, 'token.redeemed', 'bar_token', item.id, JSON.stringify({ code, item: item.item_name, price: item.price }));
   res.json({ status: 'valid', message: 'Código Válido!', details: { item: item.item_name, value: `R$ ${item.price.toFixed(2)}` } });
 });
 

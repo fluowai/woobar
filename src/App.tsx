@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
+import MegaAdminLayout from './layouts/MegaAdminLayout';
 import { useAuth } from './lib/auth';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -21,10 +22,14 @@ const Reports = lazy(() => import('./pages/Reports'));
 const CustomersCRM = lazy(() => import('./pages/CustomersCRM'));
 const Channels = lazy(() => import('./pages/Channels'));
 const WhatsAppPage = lazy(() => import('./pages/WhatsAppPage'));
+const WhatsAppConnections = lazy(() => import('./pages/WhatsAppConnections'));
 const QRMenu = lazy(() => import('./pages/QRMenu'));
 const MarketingGrowth = lazy(() => import('./pages/MarketingGrowth'));
 const Kiosk = lazy(() => import('./pages/Kiosk'));
 const PrintingSettings = lazy(() => import('./pages/PrintingSettings'));
+const FiscalPage = lazy(() => import('./pages/FiscalPage'));
+const SaasMaster = lazy(() => import('./pages/SaasMaster'));
+const RegisterTenant = lazy(() => import('./pages/RegisterTenant'));
 
 function PageLoader() {
   return (
@@ -82,6 +87,7 @@ export default function App() {
         <Routes>
           <Route path="/cardapio" element={<QRMenu />} />
           <Route path="/totem" element={<Kiosk />} />
+          <Route path="/cadastrar" element={<RegisterTenant />} />
           {!user ? (
             <>
               <Route path="/login" element={<Login />} />
@@ -90,6 +96,12 @@ export default function App() {
           ) : (
             <>
               <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="/mega-admin" element={<RequireRole roles={['superadmin']}><MegaAdminLayout /></RequireRole>}>
+                <Route index element={<SaasMaster />} />
+                <Route path="estabelecimentos" element={<SaasMaster />} />
+                <Route path="planos" element={<SaasMaster />} />
+              </Route>
+              <Route path="/saas" element={<Navigate to="/mega-admin" replace />} />
               <Route path="/" element={<MainLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="delivery" element={<RequireRole roles={R.sales}><Delivery /></RequireRole>} />
@@ -109,7 +121,9 @@ export default function App() {
                 <Route path="marketing" element={<RequireRole roles={R.manager}><MarketingGrowth /></RequireRole>} />
                 <Route path="channels" element={<RequireRole roles={R.manager}><Channels /></RequireRole>} />
                 <Route path="whatsapp" element={<RequireRole roles={R.sales}><WhatsAppPage /></RequireRole>} />
+                <Route path="whatsapp/conexoes" element={<RequireRole roles={R.manager}><WhatsAppConnections /></RequireRole>} />
                 <Route path="settings/printing" element={<RequireRole roles={R.manager}><PrintingSettings /></RequireRole>} />
+                <Route path="fiscal" element={<RequireRole roles={R.manager}><FiscalPage /></RequireRole>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </>

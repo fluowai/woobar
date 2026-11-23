@@ -28,8 +28,8 @@ Detalhes: `DEV/WORKLOG.md`. Contrato: `DEV/SPECS/ACTIVE.md`.
 
 ## Atenção
 
-- A tela `/users` continua **mock** (não lista os usuários reais) — só o `RoleBadge` foi
-  atualizado. Conectar `api.getUsers`/`createUser` é passo seguinte.
+- A tela `/users` está conectada à API real para listar, criar, editar e ativar/desativar
+  usuários. Validar o fluxo visual em navegador antes do go-live.
 - Endpoints da **99Food** não são públicos: `auth_url`, `api_url`, `status_path` e
   `order_path` são configuráveis por canal justamente para ajustar sem deploy.
   Confirmar no portal do desenvolvedor 99Food.
@@ -40,9 +40,8 @@ Detalhes: `DEV/WORKLOG.md`. Contrato: `DEV/SPECS/ACTIVE.md`.
 
 ## Próximos passos sugeridos
 
-1. Conectar a tela **Equipe & Acessos** (`/users`) à API (listar/criar/editar) — hoje é mock.
-2. Guardas por role no frontend (menu/rotas escondidas por papel) — só o backend protege.
-3. Testar homologação iFood (requisitos em `DEV/SPECS/ACTIVE.md`).
+1. Testar o fluxo visual da tela **Equipe & Acessos** (`/users`) em navegador.
+2. Testar homologação iFood (requisitos em `DEV/SPECS/ACTIVE.md`).
 4. Fase 3: sync de cardápio bidirecional (preço/disponibilidade/abertura) para todas as
    plataformas; relatórios por canal com comissão real.
 5. Fase 4: PedidosYa/DiDi (fora do BR), Entrega Sob Demanda.

@@ -4,10 +4,11 @@
 # Uso no Portainer:
 #   1. Stacks > Add stack > Git ou Upload de arquivo
 #   2. Envie este docker-compose.yml junto com um .env (use .env.example como base)
-#   3. Defina JWT_SECRET (>= 32 chars) e FISCAL_TOKEN no Environment da stack
-#   4. Deploy — serviços ficam em http://<host>:3001
+#   3. Defina APP_DOMAIN, JWT_SECRET (>= 32 chars) e FISCAL_TOKEN no Environment da stack
+#   4. Deploy — HTTPS é terminado pelo Caddy em 80/443
 #
-# Em produção atrás de reverse proxy/TLS, defina:
+# O Caddy termina TLS automaticamente. Defina:
+#   APP_DOMAIN=seu-dominio.com
 #   CORS_ORIGIN=https://seu-dominio.com
 #   APP_URL=https://seu-dominio.com
 # =============================================================================
@@ -19,19 +20,19 @@ services:
       dockerfile: Dockerfile
     container_name: woobar
     restart: unless-stopped
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET obrigatório (mín. 32 caracteres)}
       - DATABASE_PATH=/app/data/woobar.db
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3001}
-      - APP_URL=${APP_URL:-http://localhost:3001}
+      - CORS_ORIGIN=${CORS_ORIGIN:?CORS_ORIGIN obrigatório em produção}
+      - APP_URL=${APP_URL:?APP_URL obrigatório em produção}
       - BACKUP_INTERVAL_HOURS=${BACKUP_INTERVAL_HOURS:-24}
       - BACKUP_KEEP=${BACKUP_KEEP:-14}
       - FISCAL_URL=${FISCAL_URL:-http://fiscal:8080}
-      - FISCAL_TOKEN=${FISCAL_TOKEN:-}
+      - FISCAL_TOKEN=${FISCAL_TOKEN:?FISCAL_TOKEN obrigatório}
     volumes:
       - woobar_data:/app/data
       - woobar_uploads:/app/uploads
@@ -47,6 +48,25 @@ services:
       retries: 3
       start_period: 15s
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: woobar-caddy
+    restart: unless-stopped
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN obrigatório em produção}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      woobar:
+        condition: service_healthy
+    networks:
+      - woobar_net
+
   fiscal:
     build:
       context: ./fiscal
@@ -54,7 +74,7 @@ services:
     container_name: woobar-fiscal
     restart: unless-stopped
     environment:
-      - FISCAL_TOKEN=${FISCAL_TOKEN:-}
+      - FISCAL_TOKEN=${FISCAL_TOKEN:?FISCAL_TOKEN obrigatório}
       - FISCAL_STORAGE=/app/storage
     volumes:
       - fiscal_storage:/app/storage
@@ -77,3 +97,5 @@ volumes:
   woobar_data:
   woobar_uploads:
   fiscal_storage:
+  caddy_data:
+  caddy_config:

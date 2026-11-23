@@ -31,6 +31,8 @@ import kioskRoutes from './routes/kiosk.js';
 import printingRoutes from './routes/printing.js';
 import whatsappRoutes from './routes/whatsapp.js';
 import fiscalRoutes from './routes/fiscal.js';
+import paymentRoutes, { paymentWebhookRouter, publicPaymentRouter } from './routes/payments.js';
+import saasRoutes from './routes/saas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,9 +98,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Muitas tentativas de login em 15 minutos.' },
 });
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Limite de cadastros atingido. Tente novamente mais tarde.' },
+});
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
+app.use('/api/saas/register', registrationLimiter);
 
 app.use(express.json({
   limit: '500kb',
@@ -130,6 +140,10 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/fiscal', fiscalRoutes);
+// Webhooks e rotas públicas de pagamentos (sem exigir authMiddleware)
+app.use('/api/payments/webhook', paymentWebhookRouter);
+app.use('/api/payments/public', publicPaymentRouter);
+app.use('/api/payments', paymentRoutes);
 // Webhooks must be mounted BEFORE channelRoutes: otherwise channelRoutes'
 // router.use(authMiddleware) intercepts external platform callbacks with 401.
 app.use('/api/channels/webhook', webhookRouter);
@@ -138,6 +152,7 @@ app.use('/api/establishments', establishmentRoutes);
 app.use('/api/proxy', proxyRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/saas', saasRoutes);
 
 // Health check — valida também o banco (o healthcheck do compose precisa
 // ficar vermelho se o SQLite estiver inutilizável)

@@ -8,7 +8,6 @@ import { handleUberWebhook } from '../services/uber/webhook.js';
 import { handleRappiWebhook } from '../services/rappi/webhook.js';
 import { handleFood99Webhook } from '../services/food99/webhook.js';
 import { handleIfoodEvent } from '../services/ifood/polling.js';
-import { handleWhatsAppWebhook, verifyWebhook as verifyWpWebhook } from '../services/whatsapp/webhook.js';
 import { processNormalizedOrder, onChannelToggle } from '../services/orchestrator.js';
 import { logger } from '../lib/logger.js';
 
@@ -222,42 +221,6 @@ webhookRouter.post('/uber/:channelId', (req: Request, res: Response) => {
 
   handleUberWebhook(channel.id, req.body).catch(err => {
     logger.error('Uber webhook handler error', { error: err.message });
-  });
-});
-
-// ─── WhatsApp Webhook ───
-webhookRouter.get('/whatsapp/:channelId', (req: Request, res: Response) => {
-  const channel = db.prepare('SELECT * FROM channels WHERE id = ? AND type = ? AND active = 1').get(req.params.channelId, 'whatsapp') as any;
-  if (!channel) { res.status(404).json({ error: 'Canal WhatsApp não encontrado' }); return; }
-
-  const config = typeof channel.config_json === 'string' ? JSON.parse(channel.config_json) : channel.config_json;
-  const verifyToken = config.verify_token;
-
-  if (!verifyToken) {
-    res.status(403).send('Webhook não configurado');
-    return;
-  }
-
-  if (verifyWpWebhook(req.query['hub.mode'] as string, req.query['hub.verify_token'] as string, verifyToken)) {
-    res.status(200).send(req.query['hub.challenge']);
-  } else {
-    res.status(403).send('Verification failed');
-  }
-});
-
-webhookRouter.post('/whatsapp/:channelId', (req: Request, res: Response) => {
-  const channel = db.prepare('SELECT * FROM channels WHERE id = ? AND type = ? AND active = 1').get(req.params.channelId, 'whatsapp') as any;
-  if (!channel) { res.status(404).json({ error: 'Canal WhatsApp não encontrado' }); return; }
-
-  if (!verifyWebhookHmac(req, req.params.channelId)) {
-    res.status(403).json({ error: 'Assinatura inválida' });
-    return;
-  }
-
-  res.status(200).json({ status: 'received' });
-
-  handleWhatsAppWebhook(channel.id, req.body.entry || []).catch(err => {
-    logger.error('WhatsApp webhook handler error', { error: err.message });
   });
 });
 

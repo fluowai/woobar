@@ -11,7 +11,8 @@
     "build:server": "npm run build --prefix server",
     "build:all": "npm run build && npm run build:server",
     "start": "npm run start --prefix server",
-    "preview": "vite preview",
+    "start:server": "npm run start --prefix server",
+    "preview": "vite preview --port 3000 --host 0.0.0.0",
     "seed": "npm run seed --prefix server",
     "seed:users": "npm run seed:users --prefix server",
     "backup": "npm run backup --prefix server",
@@ -31,6 +32,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "qs": "6.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
@@ -49,5 +51,11 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "overrides": {
+    "qs": "6.17.1",
+    "tsx": {
+      "esbuild": "0.28.2"
+    }
   }
 }

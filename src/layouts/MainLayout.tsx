@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -22,7 +22,8 @@ import {
   MessageCircle,
   Megaphone,
   LogOut,
-  TabletSmartphone
+  TabletSmartphone,
+  FileText
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../lib/auth';
@@ -91,6 +92,7 @@ export default function MainLayout() {
       title: 'FINANCEIRO',
       items: [
         { path: '/cover', label: 'Couvert Artístico', icon: Music2, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/fiscal', label: 'Fiscal & NFC-e', icon: FileText, roles: ['admin', 'manager'] },
       ]
     },
     {
@@ -111,6 +113,7 @@ export default function MainLayout() {
       items: [
         { path: '/channels', label: 'Marketplace Canais', icon: Globe, roles: ['admin', 'manager'] },
         { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, roles: ['admin', 'manager', 'waiter', 'attendant'] },
+        { path: '/whatsapp/conexoes', label: 'Conexões WhatsApp', icon: MessageCircle, roles: ['admin', 'manager'] },
       ]
     },
     {
@@ -299,7 +302,11 @@ export default function MainLayout() {
               ))}
             </nav>
           {/* Mobile Logout */}
-          <div className="pt-6 border-t border-stone-100">
+          <div className="pt-6 border-t border-stone-100 space-y-1">
+            <NavLink to="/settings/printing" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium">
+              <Settings className="w-4 h-4" />
+              <span>Impressão</span>
+            </NavLink>
             <button onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-red-500 hover:bg-red-50 transition-colors text-sm font-medium">
               <LogOut className="w-4 h-4" />

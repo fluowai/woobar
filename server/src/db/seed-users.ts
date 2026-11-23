@@ -1,14 +1,18 @@
 import 'dotenv/config';
-import { initDatabase } from './schema.js';
-import db from './schema.js';
-import bcrypt from 'bcryptjs';
-import { v4 as uuid } from 'uuid';
-
-initDatabase();
 
 const SUPER_PASS = 'Super1234';
 const ADMIN_PASS = 'admin123';
 const STAFF_PASS = '123456';
+
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('❌ seed:users bloqueado em produção: não use credenciais padrão. Crie usuários com senhas fortes pelo painel ou via migração segura.');
+}
+
+const { initDatabase, default: db } = await import('./schema.js');
+const bcrypt = (await import('bcryptjs')).default;
+const { v4: uuid } = await import('uuid');
+
+initDatabase();
 
 let est = db.prepare('SELECT id FROM establishments WHERE slug = ?').get('woobar') as { id: string } | undefined;
 if (!est) {

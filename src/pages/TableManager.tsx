@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Coffee, Clock, DollarSign, X, Plus, Loader2, Sparkles } from 'lucide-react';
+import { Users, Coffee, Clock, DollarSign, X, Plus, Loader2, Sparkles, Printer } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../lib/api';
 
@@ -48,6 +48,20 @@ export default function TableManager() {
     catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
 
+  const printAccount = async () => {
+    const order = currentOrder || orderByTable.get(selected?.id); if (!order) return;
+    setBusy(true);
+    try {
+      await api.printTableOrder(order.id);
+      setError('');
+      alert('Conferência da mesa enviada para a fila de impressão!');
+    } catch (e: any) {
+      setError(e.message || 'Falha ao imprimir conferência.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const closeAccount = async () => {
     const order = currentOrder || orderByTable.get(selected?.id); if (!order) return;
     setBusy(true);
@@ -86,7 +100,16 @@ export default function TableManager() {
           {showProducts && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto border rounded-2xl p-2">{products.map(p=><button disabled={busy} key={p.id} onClick={()=>addItem(p)} className="p-3 text-left rounded-xl hover:bg-orange-50 border border-stone-100 flex justify-between gap-2"><span><strong className="block text-sm">{p.name}</strong><small className="text-stone-500">R$ {Number(p.price).toFixed(2)}</small></span><Plus className="w-4 h-4 text-orange-500" /></button>)}</div>}
           <div className="bg-stone-50 rounded-2xl p-4"><h3 className="font-bold mb-3 flex gap-2"><Clock className="w-4 h-4" />Resumo da comanda</h3><div className="space-y-2 max-h-48 overflow-y-auto">{detail?.items?.map((item:any)=><div key={item.id} className="flex justify-between text-sm"><span>{item.quantity}x {item.product_name}</span><span>R$ {(item.quantity*item.price).toFixed(2)}</span></div>)}{!detail?.items?.length&&<p className="text-sm text-stone-400">Nenhum item adicionado.</p>}</div><div className="border-t mt-3 pt-3 flex justify-between font-bold text-lg"><span>Total</span><span>R$ {Number(detail?.total || currentOrder?.total || 0).toFixed(2)}</span></div></div>
           <div><label className="text-xs font-bold text-stone-500">FORMA DE PAGAMENTO</label><div className="grid grid-cols-3 gap-2 mt-2">{[['pix','PIX'],['card','Cartao'],['cash','Dinheiro']].map(([v,l])=><button key={v} onClick={()=>setPayment(v)} className={cn('py-3 rounded-xl border font-bold text-sm',payment===v?'bg-stone-900 text-white border-stone-900':'bg-white')}>{l}</button>)}</div></div>
-          <button disabled={busy} onClick={closeAccount} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2">{busy?<Loader2 className="animate-spin"/>:<DollarSign className="w-5 h-5"/>}Fechar conta</button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button disabled={busy} onClick={printAccount} className="w-full py-4 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+              <Printer className="w-5 h-5 text-stone-600" />
+              Imprimir Conta
+            </button>
+            <button disabled={busy} onClick={closeAccount} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2">
+              {busy ? <Loader2 className="animate-spin" /> : <DollarSign className="w-5 h-5" />}
+              Fechar conta
+            </button>
+          </div>
         </>}
       </div>
     </motion.div></div>}</AnimatePresence>

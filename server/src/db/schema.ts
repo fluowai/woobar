@@ -53,11 +53,17 @@ export function initDatabase() {
       id TEXT PRIMARY KEY,
       establishment_id TEXT REFERENCES establishments(id),
       category_id TEXT REFERENCES categories(id),
+      webhook_secret TEXT,
       name TEXT NOT NULL,
       description TEXT,
       price REAL NOT NULL,
       image TEXT,
       active INTEGER DEFAULT 1,
+      ncm TEXT DEFAULT '22030000',
+      cfop TEXT DEFAULT '5102',
+      csosn TEXT DEFAULT '102',
+      origin INTEGER DEFAULT 0,
+      unit TEXT DEFAULT 'UN',
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -167,6 +173,9 @@ export function initDatabase() {
       status TEXT CHECK(status IN ('valid','used')) DEFAULT 'valid',
       type TEXT CHECK(type IN ('token','ticket')) DEFAULT 'token',
       payment_method TEXT,
+      expires_at TEXT,
+      used_at TEXT,
+      used_by TEXT REFERENCES users(id),
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -271,6 +280,49 @@ export function initDatabase() {
       webhook_secret TEXT,
       active INTEGER DEFAULT 1,
       config_json TEXT DEFAULT '{}'
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_connections (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT NOT NULL REFERENCES establishments(id),
+      display_name TEXT NOT NULL,
+      session_name TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'waha',
+      base_url TEXT NOT NULL,
+      api_key TEXT,
+      category_id TEXT REFERENCES categories(id),
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(establishment_id, session_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_contacts (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT NOT NULL REFERENCES establishments(id),
+      connection_id TEXT NOT NULL REFERENCES whatsapp_connections(id) ON DELETE CASCADE,
+      phone TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      push_name TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(connection_id, phone)
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT NOT NULL REFERENCES establishments(id),
+      connection_id TEXT NOT NULL REFERENCES whatsapp_connections(id) ON DELETE CASCADE,
+      chat_id TEXT NOT NULL,
+      direction TEXT CHECK(direction IN ('inbound','outbound')) NOT NULL,
+      type TEXT NOT NULL DEFAULT 'text',
+      text TEXT,
+      media_url TEXT,
+      media_mime TEXT,
+      media_filename TEXT,
+      push_name TEXT,
+      raw_json TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(connection_id, id)
     );
 
     CREATE TABLE IF NOT EXISTS channel_orders (
@@ -403,11 +455,173 @@ export function initDatabase() {
       created_at TEXT DEFAULT (datetime('now')),
       printed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS fiscal_settings (
+      establishment_id TEXT PRIMARY KEY REFERENCES establishments(id),
+      environment INTEGER DEFAULT 2,
+      company_name TEXT,
+      fantasy_name TEXT,
+      cnpj TEXT,
+      ie TEXT,
+      crt INTEGER DEFAULT 1,
+      uf TEXT DEFAULT 'SP',
+      ibge_code INTEGER DEFAULT 3550308,
+      city TEXT DEFAULT 'São Paulo',
+      street TEXT,
+      number TEXT,
+      complement TEXT,
+      neighborhood TEXT,
+      zip_code TEXT,
+      phone TEXT,
+      csc TEXT,
+      csc_id TEXT,
+      cert_pfx_base64 TEXT,
+      cert_password TEXT,
+      serie INTEGER DEFAULT 1,
+      last_number INTEGER DEFAULT 0,
+      auto_emit_on_closing INTEGER DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS fiscal_invoices (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT REFERENCES establishments(id),
+      order_id TEXT REFERENCES orders(id),
+      table_order_id TEXT REFERENCES table_orders(id),
+      serie INTEGER NOT NULL,
+      number INTEGER NOT NULL,
+      status TEXT CHECK(status IN ('autorizada','cancelada','rejeitada','denegada','erro')) NOT NULL,
+      ch_nfe TEXT,
+      protocol TEXT,
+      xml TEXT,
+      qrcode_url TEXT,
+      c_stat TEXT,
+      motivo TEXT,
+      total REAL NOT NULL,
+      items_json TEXT,
+      payments_json TEXT,
+      customer_cpf TEXT,
+      customer_name TEXT,
+      environment INTEGER DEFAULT 2,
+      cancelled_at TEXT,
+      cancel_reason TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_settings (
+      establishment_id TEXT PRIMARY KEY REFERENCES establishments(id),
+      provider TEXT NOT NULL DEFAULT 'mercadopago',
+      access_token TEXT,
+      public_key TEXT,
+      webhook_secret TEXT,
+      pix_key TEXT,
+      auto_approve_test INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT REFERENCES establishments(id),
+      order_id TEXT REFERENCES orders(id),
+      table_order_id TEXT REFERENCES table_orders(id),
+      provider TEXT NOT NULL DEFAULT 'mercadopago',
+      external_id TEXT,
+      status TEXT CHECK(status IN ('pending','approved','rejected','cancelled','refunded')) DEFAULT 'pending',
+      method TEXT NOT NULL DEFAULT 'pix',
+      amount REAL NOT NULL,
+      qr_code TEXT,
+      qr_code_base64 TEXT,
+      ticket_url TEXT,
+      payer_email TEXT,
+      payer_name TEXT,
+      payer_cpf TEXT,
+      paid_at TEXT,
+      expires_at TEXT,
+      raw_payload TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payments_external ON payments(provider, external_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_table ON payments(table_order_id);
+
+    CREATE TABLE IF NOT EXISTS saas_plans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      description TEXT,
+      price_monthly REAL NOT NULL DEFAULT 0,
+      price_yearly REAL NOT NULL DEFAULT 0,
+      max_tables INTEGER DEFAULT 15,
+      max_users INTEGER DEFAULT 5,
+      max_products INTEGER DEFAULT 100,
+      features_json TEXT NOT NULL DEFAULT '[]',
+      is_popular INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS saas_subscriptions (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT UNIQUE REFERENCES establishments(id),
+      plan_id TEXT REFERENCES saas_plans(id),
+      status TEXT CHECK(status IN ('trial', 'active', 'past_due', 'canceled')) DEFAULT 'trial',
+      trial_ends_at TEXT,
+      current_period_end TEXT,
+      billing_cycle TEXT CHECK(billing_cycle IN ('monthly', 'yearly')) DEFAULT 'monthly',
+      payment_method TEXT DEFAULT 'pix',
+      gateway_customer_id TEXT,
+      gateway_subscription_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_saas_sub_est ON saas_subscriptions(establishment_id);
+    CREATE INDEX IF NOT EXISTS idx_saas_sub_status ON saas_subscriptions(status);
   `);
+
+  initSaasDefaults();
   const printerColumns = db.prepare("PRAGMA table_info(printer_configs)").all() as Array<{ name: string }>;
   if (!printerColumns.some(column => column.name === 'delivery_mode')) {
     db.exec("ALTER TABLE printer_configs ADD COLUMN delivery_mode TEXT DEFAULT 'agent'");
   }
+
+  const productColumns = db.prepare("PRAGMA table_info(products)").all() as Array<{ name: string }>;
+  if (!productColumns.some(c => c.name === 'ncm')) {
+    db.exec("ALTER TABLE products ADD COLUMN ncm TEXT DEFAULT '22030000'");
+  }
+  if (!productColumns.some(c => c.name === 'cfop')) {
+    db.exec("ALTER TABLE products ADD COLUMN cfop TEXT DEFAULT '5102'");
+  }
+  if (!productColumns.some(c => c.name === 'csosn')) {
+    db.exec("ALTER TABLE products ADD COLUMN csosn TEXT DEFAULT '102'");
+  }
+  if (!productColumns.some(c => c.name === 'origin')) {
+    db.exec("ALTER TABLE products ADD COLUMN origin INTEGER DEFAULT 0");
+  }
+  if (!productColumns.some(c => c.name === 'unit')) {
+    db.exec("ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'UN'");
+  }
+
+  const orderColumns = db.prepare("PRAGMA table_info(orders)").all() as Array<{ name: string }>;
+  if (!orderColumns.some(c => c.name === 'payment_status')) {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'unpaid'");
+  }
+
+  const tableOrderColumns = db.prepare("PRAGMA table_info(table_orders)").all() as Array<{ name: string }>;
+  if (!tableOrderColumns.some(c => c.name === 'payment_status')) {
+    db.exec("ALTER TABLE table_orders ADD COLUMN payment_status TEXT DEFAULT 'unpaid'");
+  }
+
+  const barTokenColumns = db.prepare("PRAGMA table_info(bar_tokens)").all() as Array<{ name: string }>;
+  if (!barTokenColumns.some(c => c.name === 'expires_at')) db.exec("ALTER TABLE bar_tokens ADD COLUMN expires_at TEXT");
+  if (!barTokenColumns.some(c => c.name === 'used_at')) db.exec("ALTER TABLE bar_tokens ADD COLUMN used_at TEXT");
+  if (!barTokenColumns.some(c => c.name === 'used_by')) db.exec("ALTER TABLE bar_tokens ADD COLUMN used_by TEXT");
+
+  const whatsappConnectionColumns = db.prepare("PRAGMA table_info(whatsapp_connections)").all() as Array<{ name: string }>;
+  if (whatsappConnectionColumns.length && !whatsappConnectionColumns.some(c => c.name === 'webhook_secret')) db.exec("ALTER TABLE whatsapp_connections ADD COLUMN webhook_secret TEXT");
 
   migrateConstraints();
   migrateTenantSettings();
@@ -442,6 +656,69 @@ function migrateTenantSettings() {
       logger.info(`Migração ${table}: PK → establishment_id`);
     } finally {
       db.pragma('foreign_keys = ON');
+    }
+  }
+}
+
+function initSaasDefaults() {
+  const insertPlan = db.prepare(`
+    INSERT OR IGNORE INTO saas_plans (id, name, slug, description, price_monthly, price_yearly, max_tables, max_users, max_products, features_json, is_popular, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `);
+
+  insertPlan.run(
+    'plan-starter',
+    'Starter PDV',
+    'starter',
+    'Ideal para lanchonetes e bares pequenos que precisam de PDV, Mesas e Cardápio Digital.',
+    97.00,
+    970.00,
+    15,
+    5,
+    100,
+    JSON.stringify(['pos', 'tables', 'menu_qr', 'reports']),
+    0
+  );
+
+  insertPlan.run(
+    'plan-pro',
+    'Pro Bar & KDS',
+    'pro',
+    'Completo para choperias, restaurantes e bares com cozinha, fichas e delivery.',
+    197.00,
+    1970.00,
+    50,
+    15,
+    300,
+    JSON.stringify(['pos', 'tables', 'menu_qr', 'reports', 'kds', 'tokens', 'inventory', 'whatsapp', 'delivery']),
+    1
+  );
+
+  insertPlan.run(
+    'plan-enterprise',
+    'Enterprise & Fiscal',
+    'enterprise',
+    'Para grandes casas noturnas, baladas, eventos, totem de autoatendimento e emissão fiscal NFC-e.',
+    349.00,
+    3490.00,
+    999,
+    99,
+    999,
+    JSON.stringify(['pos', 'tables', 'menu_qr', 'reports', 'kds', 'tokens', 'inventory', 'whatsapp', 'delivery', 'fiscal', 'kiosk', 'events', 'channels']),
+    0
+  );
+
+  // Vincular estabelecimentos existentes sem assinatura ao plano enterprise ativo
+  const ests = db.prepare('SELECT id FROM establishments').all() as Array<{ id: string }>;
+  const checkSub = db.prepare('SELECT id FROM saas_subscriptions WHERE establishment_id = ?');
+  const insertSub = db.prepare(`
+    INSERT INTO saas_subscriptions (id, establishment_id, plan_id, status, trial_ends_at, current_period_end, billing_cycle)
+    VALUES (?, ?, 'plan-enterprise', 'active', datetime('now', '+365 days'), datetime('now', '+365 days'), 'monthly')
+  `);
+
+  for (const est of ests) {
+    if (!checkSub.get(est.id)) {
+      insertSub.run(`sub-${est.id}`, est.id);
     }
   }
 }

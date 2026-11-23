@@ -4,6 +4,19 @@ const AUTH_PATHS = ['/auth/login', '/auth/refresh'];
 
 export const API_BASE = API_URL;
 
+export const whatsappConnections = {
+  list: () => request('/whatsapp/connections'),
+  create: (data: any) => request('/whatsapp/connections', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => request(`/whatsapp/connections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  remove: (id: string) => request(`/whatsapp/connections/${id}`, { method: 'DELETE' }),
+  status: (id: string) => request(`/whatsapp/connections/${id}/status`),
+  qr: (id: string) => request(`/whatsapp/connections/${id}/qr`),
+  action: (id: string, action: string) => request(`/whatsapp/connections/${id}/${action}`, { method: 'POST' }),
+  catalog: (id: string) => request(`/whatsapp/connections/${id}/catalog`),
+  contacts: (id: string) => request(`/whatsapp/connections/${id}/contacts`),
+  updateContact: (id: string, phone: string, display_name: string) => request(`/whatsapp/connections/${id}/contacts/${encodeURIComponent(phone)}`, { method: 'PATCH', body: JSON.stringify({ display_name }) }),
+};
+
 let authToken: string | null = localStorage.getItem('woobar_token');
 
 export function setToken(token: string | null) {
@@ -207,4 +220,33 @@ export const api = {
   retryPrintJob: (id: string) => request(`/printing/jobs/${id}/retry`, { method: 'POST' }),
   printToken: (code: string) => request(`/printing/token/${code}`, { method: 'POST' }),
   printTicket: (code: string) => request(`/printing/ticket/${code}`, { method: 'POST' }),
+  printOrder: (id: string) => request(`/printing/order/${id}`, { method: 'POST' }),
+  printTableOrder: (id: string) => request(`/printing/table-order/${id}`, { method: 'POST' }),
+
+  // Fiscal (NFC-e / SEFAZ)
+  getFiscalSettings: () => request('/fiscal/settings'),
+  updateFiscalSettings: (data: any) => request('/fiscal/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  checkFiscalStatus: () => request('/fiscal/status'),
+  getFiscalInvoices: (limit = 50, offset = 0) => request(`/fiscal/invoices?limit=${limit}&offset=${offset}`),
+  getFiscalInvoice: (id: string) => request(`/fiscal/invoices/${id}`),
+  getFiscalXmlUrl: (id: string) => `${API_URL}/fiscal/invoices/${id}/xml`,
+  emitNfceOrder: (orderId: string, customer?: { customer_cpf?: string; customer_name?: string }) =>
+    request(`/fiscal/emit-order/${orderId}`, { method: 'POST', body: JSON.stringify(customer || {}) }),
+  emitNfceTableOrder: (tableOrderId: string, customer?: { customer_cpf?: string; customer_name?: string }) =>
+    request(`/fiscal/emit-table-order/${tableOrderId}`, { method: 'POST', body: JSON.stringify(customer || {}) }),
+  cancelNfce: (id: string, justificativa: string) =>
+    request(`/fiscal/invoices/${id}/cancel`, { method: 'POST', body: JSON.stringify({ justificativa }) }),
+  printFiscalInvoice: (id: string) => request(`/fiscal/invoices/${id}/print`, { method: 'POST' }),
+
+  // SaaS Master (Super Admin & Onboarding)
+  getSaasMetrics: () => request('/saas/metrics'),
+  getSaasTenants: () => request('/saas/tenants'),
+  createSaasTenant: (data: any) => request('/saas/tenants', { method: 'POST', body: JSON.stringify(data) }),
+  updateSaasTenantStatus: (id: string, data: { active?: boolean; subscription_status?: string }) =>
+    request(`/saas/tenants/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateSaasTenantPlan: (id: string, data: { plan_slug?: string; status?: string; extend_days?: number }) =>
+    request(`/saas/tenants/${id}/plan`, { method: 'PATCH', body: JSON.stringify(data) }),
+  impersonateTenant: (id: string) => request(`/saas/tenants/${id}/impersonate`, { method: 'POST' }),
+  getSaasPlans: () => request('/saas/plans'),
+  registerSaasTenant: (data: any) => request('/saas/register', { method: 'POST', body: JSON.stringify(data) }),
 };

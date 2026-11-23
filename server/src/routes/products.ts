@@ -15,6 +15,11 @@ const updateProduct = z.object({
   category_id: z.string().optional(),
   image: z.string().optional(),
   active: z.union([z.literal(0), z.literal(1), z.boolean()]).optional(),
+  ncm: z.string().length(8).optional(),
+  cfop: z.string().length(4).optional(),
+  csosn: z.string().optional(),
+  origin: z.number().int().min(0).max(8).optional(),
+  unit: z.string().optional(),
 });
 
 router.get('/', (req: Request, res: Response) => {
@@ -33,14 +38,21 @@ router.get('/categories', (req: Request, res: Response) => {
 });
 
 router.post('/', roleGuard('admin', 'manager'), validate(schemas.createProduct), (req: Request, res: Response) => {
-  const { name, description, price, category_id, image } = req.body;
+  const { name, description, price, category_id, image, ncm, cfop, csosn, origin, unit } = req.body;
   if (category_id) {
     const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND establishment_id = ?').get(category_id, req.user!.establishment_id);
     if (!cat) { res.status(400).json({ error: 'Categoria inválida' }); return; }
   }
   const id = uuid();
-  db.prepare('INSERT INTO products (id, establishment_id, category_id, name, description, price, image) VALUES (?,?,?,?,?,?,?)')
-    .run(id, req.user!.establishment_id, category_id || null, name, description, price, image || null);
+  db.prepare(`
+    INSERT INTO products (
+      id, establishment_id, category_id, name, description, price, image,
+      ncm, cfop, csosn, origin, unit
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    id, req.user!.establishment_id, category_id || null, name, description, price, image || null,
+    ncm || '22030000', cfop || '5102', csosn || '102', origin ?? 0, unit || 'UN'
+  );
   res.status(201).json({ id, name, price });
 });
 
@@ -48,8 +60,16 @@ router.put('/:id', roleGuard('admin', 'manager'), validate(updateProduct), (req:
   const existing = db.prepare('SELECT * FROM products WHERE id = ? AND establishment_id = ?').get(req.params.id, req.user!.establishment_id) as any;
   if (!existing) { res.status(404).json({ error: 'Produto não encontrado' }); return; }
   const merged = { ...existing, ...req.body };
-  db.prepare('UPDATE products SET name=?, description=?, price=?, category_id=?, image=?, active=? WHERE id=? AND establishment_id=?')
-    .run(merged.name, merged.description, merged.price, merged.category_id, merged.image, merged.active ? 1 : 0, req.params.id, req.user!.establishment_id);
+  db.prepare(`
+    UPDATE products SET
+      name=?, description=?, price=?, category_id=?, image=?, active=?,
+      ncm=?, cfop=?, csosn=?, origin=?, unit=?
+    WHERE id=? AND establishment_id=?
+  `).run(
+    merged.name, merged.description, merged.price, merged.category_id, merged.image, merged.active ? 1 : 0,
+    merged.ncm || '22030000', merged.cfop || '5102', merged.csosn || '102', merged.origin ?? 0, merged.unit || 'UN',
+    req.params.id, req.user!.establishment_id
+  );
   res.json({ success: true });
 });
 

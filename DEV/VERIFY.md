@@ -66,3 +66,13 @@ npm run seed:users   # idempotente: cria/atualiza sem reescrever senhas existent
 
 ### Ajuste de infra de testes
 - `server/vitest.config.ts`: `maxWorkers: 2` — 5 forks simultaneos no Windows estouravam timeout/`fetch failed` (auth/financial falhavam apenas em paralelo).
+
+| 2026-11-05 | npm test --prefix server (Vitest) | OK (67/67 testes passando) |
+| 2026-11-05 | npm run lint (Frontend tsc --noEmit) | OK (0 erros de tipagem) |
+| 2026-11-05 | npm run build (Vite production build) | OK (62 chunks, pasta dist) |
+| 2026-11-05 | npm run build:server (Server tsc) | OK (server/dist) |
+| 2026-11-05 | DEV/test-e2e.ts (Bateria E2E Core) | OK (36/36 testes aprovados) |
+| 2026-11-05 | DEV/test-full-production.ts (Fluxo Produção + Novos Produtos) | OK (25/25 testes aprovados) |
+| 2026-11-05 | Servidores Localhost (3000 Front / 3001 Back) | OK (HTTP 200 em ambos) |
+| 2026-11-05 | DEV/test-saas.ts (Bateria Completa SaaS) | OK (14/14 testes aprovados) |
+| 2026-11-05 | Frontend & Backend SaaS Build | OK (Vite + tsc server sem erros) |

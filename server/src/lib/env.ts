@@ -19,6 +19,14 @@ function validateProductionUrl(name: string, value: string): string {
   return value;
 }
 
+function requireProductionSecret(name: string): string {
+  const value = requireEnv(name);
+  if (process.env.NODE_ENV === 'production' && value.length < 32) {
+    throw new Error(`❌ ${name} deve ter no mínimo 32 caracteres em produção`);
+  }
+  return value;
+}
+
 export const env = {
   PORT: parseInt(optionalEnv('PORT', '3001'), 10),
   JWT_SECRET: (() => {
@@ -37,4 +45,5 @@ export const env = {
   APP_URL: validateProductionUrl('APP_URL', optionalEnv('APP_URL', 'http://localhost:3000')),
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   CORS_ORIGIN: validateProductionUrl('CORS_ORIGIN', optionalEnv('CORS_ORIGIN', 'http://localhost:3000')),
+  FISCAL_TOKEN: process.env.NODE_ENV === 'production' ? requireProductionSecret('FISCAL_TOKEN') : optionalEnv('FISCAL_TOKEN', ''),
 };

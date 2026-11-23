@@ -2,6 +2,7 @@ import { getAccessToken, clearToken } from './auth.js';
 import { Food99Order } from './types.js';
 import { logger } from '../../lib/logger.js';
 import db from '../../db/schema.js';
+import { assertSafeOutboundUrl } from '../../lib/url-security.js';
 
 interface Food99ApiConfig {
   api_url: string;
@@ -36,7 +37,8 @@ async function apiFetch<T>(
   if (!token) return null;
 
   try {
-    const res = await fetch(`${config.api_url}${path}`, {
+    const base = await assertSafeOutboundUrl(config.api_url);
+    const res = await fetch(`${base.toString().replace(/\/$/, '')}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -80,7 +82,8 @@ export async function updateOrderStatus(
   if (!token) return false;
 
   try {
-    const res = await fetch(`${config.api_url}${path}`, {
+    const base = await assertSafeOutboundUrl(config.api_url);
+    const res = await fetch(`${base.toString().replace(/\/$/, '')}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

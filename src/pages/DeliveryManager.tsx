@@ -13,7 +13,8 @@ import {
   Filter,
   DollarSign,
   AlertCircle,
-  Loader2
+  Loader2,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -172,6 +173,21 @@ const OrderCard: React.FC<OrderCardProps> = ({
               {couriers.find(c => c.id === order.courierId)?.name.split(' ')[0]}
             </div>
           )}
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                await api.printOrder(order.id);
+                alert('Pedido enviado para a fila de impressão!');
+              } catch (err: any) {
+                alert(err.message || 'Falha ao imprimir pedido');
+              }
+            }}
+            className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg transition-colors"
+            title="Imprimir comanda"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onChatClick(order.id); }}
             className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg transition-colors"
