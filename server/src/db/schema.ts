@@ -580,6 +580,31 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_saas_sub_est ON saas_subscriptions(establishment_id);
     CREATE INDEX IF NOT EXISTS idx_saas_sub_status ON saas_subscriptions(status);
+
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id TEXT PRIMARY KEY,
+      establishment_id TEXT REFERENCES establishments(id),
+      requester_user_id TEXT REFERENCES users(id),
+      subject TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT CHECK(status IN ('open','in_progress','waiting_customer','resolved','closed')) DEFAULT 'open',
+      priority TEXT CHECK(priority IN ('low','normal','high','urgent')) DEFAULT 'normal',
+      assigned_to TEXT REFERENCES users(id),
+      last_reply_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status, priority, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_establishment ON support_tickets(establishment_id, updated_at);
+
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id TEXT PRIMARY KEY,
+      ticket_id TEXT NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+      user_id TEXT REFERENCES users(id),
+      body TEXT NOT NULL,
+      internal INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   initSaasDefaults();

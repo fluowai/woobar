@@ -249,4 +249,9 @@ export const api = {
   impersonateTenant: (id: string) => request(`/saas/tenants/${id}/impersonate`, { method: 'POST' }),
   getSaasPlans: () => request('/saas/plans'),
   registerSaasTenant: (data: any) => request('/saas/register', { method: 'POST', body: JSON.stringify(data) }),
+  getSupportTickets: (status = 'all') => request(`/support/tickets?status=${status}`),
+  createSupportTicket: (data: any) => request('/support/tickets', { method: 'POST', body: JSON.stringify(data) }),
+  getSupportMessages: (id: string) => request(`/support/tickets/${id}/messages`),
+  addSupportMessage: (id: string, data: any) => request(`/support/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify(data) }),
+  updateSupportTicket: (id: string, data: any) => request(`/support/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Building2, LayoutDashboard, LogOut, Store, Layers3, ShieldCheck } from 'lucide-react';
+import { Building2, LayoutDashboard, LogOut, Store, Layers3, ShieldCheck, MessageSquare } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';
 
@@ -8,6 +8,7 @@ const navigation = [
   { path: '/mega-admin', label: 'Visão geral', icon: LayoutDashboard, end: true },
   { path: '/mega-admin/estabelecimentos', label: 'Restaurantes', icon: Building2 },
   { path: '/mega-admin/planos', label: 'Planos e recursos', icon: Layers3 },
+  { path: '/mega-admin/suporte', label: 'Suporte aos clientes', icon: MessageSquare },
 ];
 
 export default function MegaAdminLayout() {

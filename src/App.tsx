@@ -30,6 +30,7 @@ const PrintingSettings = lazy(() => import('./pages/PrintingSettings'));
 const FiscalPage = lazy(() => import('./pages/FiscalPage'));
 const SaasMaster = lazy(() => import('./pages/SaasMaster'));
 const RegisterTenant = lazy(() => import('./pages/RegisterTenant'));
+const SupportAdmin = lazy(() => import('./pages/SupportAdmin'));
 
 function PageLoader() {
   return (
@@ -100,6 +101,7 @@ export default function App() {
                 <Route index element={<SaasMaster />} />
                 <Route path="estabelecimentos" element={<SaasMaster />} />
                 <Route path="planos" element={<SaasMaster />} />
+                <Route path="suporte" element={<SupportAdmin />} />
               </Route>
               <Route path="/saas" element={<Navigate to="/mega-admin" replace />} />
               <Route path="/" element={<MainLayout />}>

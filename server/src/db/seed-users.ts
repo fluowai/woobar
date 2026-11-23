@@ -33,7 +33,7 @@ interface Target {
 }
 
 const targets: Target[] = [
-  { name: 'Super Admin', email: 'superadmin@woobar.com', password: SUPER_PASS, role: 'superadmin', establishment: null },
+  { name: 'Mega Admin', email: 'opauloargolo@gmail.com', password: SUPER_PASS, role: 'superadmin', establishment: null },
   { name: 'Admin', email: 'admin@woobar.com', password: ADMIN_PASS, role: 'admin' },
   { name: 'Roberto Gerente', email: 'roberto@woobar.com', password: STAFF_PASS, role: 'manager' },
   { name: 'Pedro Garçom', email: 'pedro@woobar.com', password: STAFF_PASS, role: 'waiter' },
@@ -50,6 +50,13 @@ const updateUser = db.prepare('UPDATE users SET name = ?, role = ?, establishmen
 
 type Action = 'criado' | 'atualizado' | 'mantido';
 const results: Array<{ target: Target; action: Action }> = [];
+
+// Migra o e-mail legado do Mega Admin sem criar uma segunda conta privilegiada.
+const legacySuper = db.prepare("SELECT id FROM users WHERE email = 'superadmin@woobar.com' AND role = 'superadmin'").get() as { id: string } | undefined;
+const requestedSuper = db.prepare("SELECT id FROM users WHERE email = 'opauloargolo@gmail.com'").get();
+if (legacySuper && !requestedSuper) {
+  db.prepare("UPDATE users SET email = 'opauloargolo@gmail.com', name = 'Mega Admin' WHERE id = ?").run(legacySuper.id);
+}
 
 db.transaction(() => {
   for (const target of targets) {

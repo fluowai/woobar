@@ -10,6 +10,11 @@ import { validate } from '../lib/validate.js';
 
 const router = Router();
 
+function audit(userId: string, action: string, entityType: string, entityId: string, details: Record<string, unknown> = {}) {
+  db.prepare('INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details_json) VALUES (?,?,?,?,?,?)')
+    .run(uuid(), userId, action, entityType, entityId, JSON.stringify(details));
+}
+
 // ==========================================
 // 1. ENDPOINTS PÚBLICOS (Auto-Onboarding & Planos)
 // ==========================================
@@ -203,6 +208,8 @@ router.post('/tenants', (req: Request, res: Response) => {
     `).run(subId, estId, plan.id);
   })();
 
+  audit(req.user!.id, 'saas_tenant_created', 'establishment', estId, { plan_slug, trial_days });
+
   res.status(201).json({ success: true, id: estId, message: 'Novo estabelecimento provisionado com sucesso' });
 });
 
@@ -223,6 +230,8 @@ router.patch('/tenants/:id/status', (req: Request, res: Response) => {
         .run(subscription_status, req.params.id);
     }
   })();
+
+  audit(req.user!.id, 'saas_tenant_status_changed', 'establishment', req.params.id, { active, subscription_status });
 
   res.json({ success: true, message: 'Status do estabelecimento atualizado' });
 });
@@ -259,6 +268,7 @@ router.patch('/tenants/:id/plan', (req: Request, res: Response) => {
     updates.push("updated_at = datetime('now')");
     params.push(req.params.id);
     db.prepare(`UPDATE saas_subscriptions SET ${updates.join(', ')} WHERE establishment_id = ?`).run(...params);
+    audit(req.user!.id, 'saas_subscription_updated', 'establishment', req.params.id, { plan_slug, status, extend_days });
   }
 
   res.json({ success: true, message: 'Assinatura atualizada com sucesso' });

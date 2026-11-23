@@ -33,6 +33,7 @@ import whatsappRoutes from './routes/whatsapp.js';
 import fiscalRoutes from './routes/fiscal.js';
 import paymentRoutes, { paymentWebhookRouter, publicPaymentRouter } from './routes/payments.js';
 import saasRoutes from './routes/saas.js';
+import supportRoutes from './routes/support.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,6 +154,7 @@ app.use('/api/proxy', proxyRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/saas', saasRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health check — valida também o banco (o healthcheck do compose precisa
 // ficar vermelho se o SQLite estiver inutilizável)
