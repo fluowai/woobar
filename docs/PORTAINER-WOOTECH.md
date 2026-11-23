@@ -28,7 +28,7 @@ Não coloque credenciais do Supabase, banco, JWT ou fiscal no arquivo versionado
 
 ## Deploy e verificação
 
-Use o `docker-compose.yml` deste repositório como arquivo da stack. A imagem publicada é:
+Use o `docker-compose.yml` deste repositório como arquivo da stack. Ele também pode ser colado diretamente no editor Web do Portainer. A imagem publicada é:
 
 ```text
 ghcr.io/fluowai/woobar:main
