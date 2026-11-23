@@ -33,6 +33,10 @@ services:
       - BACKUP_KEEP=${BACKUP_KEEP:-14}
       - FISCAL_URL=${FISCAL_URL:-http://fiscal:8080}
       - FISCAL_TOKEN=${FISCAL_TOKEN:?FISCAL_TOKEN obrigatório}
+      # Bootstrap opcional do Mega Admin. Informe os dois valores no Portainer
+      # para criar/atualizar a conta no volume persistente do banco.
+      - MEGA_ADMIN_EMAIL=${MEGA_ADMIN_EMAIL:-}
+      - MEGA_ADMIN_PASSWORD=${MEGA_ADMIN_PASSWORD:-}
     volumes:
       - woobar_data:/app/data
       - woobar_uploads:/app/uploads

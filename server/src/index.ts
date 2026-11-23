@@ -9,6 +9,9 @@ import { logger } from './lib/logger.js';
 import jwt from 'jsonwebtoken';
 
 import { initializeChannelServices, stopAllChannelServices } from './services/orchestrator.js';
+import { bootstrapMegaAdmin } from './db/bootstrap-admin.js';
+
+bootstrapMegaAdmin(env.MEGA_ADMIN_EMAIL, env.MEGA_ADMIN_PASSWORD);
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 1024 * 100 });

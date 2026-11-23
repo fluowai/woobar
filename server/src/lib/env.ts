@@ -46,4 +46,6 @@ export const env = {
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   CORS_ORIGIN: validateProductionUrl('CORS_ORIGIN', optionalEnv('CORS_ORIGIN', 'http://localhost:3000')),
   FISCAL_TOKEN: process.env.NODE_ENV === 'production' ? requireProductionSecret('FISCAL_TOKEN') : optionalEnv('FISCAL_TOKEN', ''),
+  MEGA_ADMIN_EMAIL: optionalEnv('MEGA_ADMIN_EMAIL', ''),
+  MEGA_ADMIN_PASSWORD: optionalEnv('MEGA_ADMIN_PASSWORD', ''),
 };
