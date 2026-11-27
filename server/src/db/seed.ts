@@ -14,10 +14,21 @@ if (existing) {
   process.exit(0);
 }
 
-// AVISO: Altere esta senha imediatamente após o primeiro login!
-// Use: https://www.random.org/passwords/?num=1&len=16&format=html&rnd=new
-const adminPass = bcrypt.hashSync('admin123', 10);
-const userPass = bcrypt.hashSync('123456', 10);
+function requiredSeedPassword(name: string): string {
+  const value = process.env[name] || '';
+  if (!value) {
+    throw new Error(`❌ ${name} é obrigatória em produção e deve ser informada somente pelo ambiente`);
+  }
+  if (process.env.NODE_ENV === 'production' && value.length < 12) {
+    throw new Error(`❌ ${name} deve ter no mínimo 12 caracteres em produção`);
+  }
+  return value;
+}
+
+const adminPassword = requiredSeedPassword('SEED_ADMIN_PASSWORD');
+const staffPassword = requiredSeedPassword('SEED_STAFF_PASSWORD');
+const adminPass = bcrypt.hashSync(adminPassword, 12);
+const userPass = bcrypt.hashSync(staffPassword, 12);
 
 const insertEst = db.prepare(`INSERT INTO establishments (id, name, slug, address, phone) VALUES (?,?,?,?,?)`);
 insertEst.run(EST_ID, 'Woobar Unit 1', 'woobar', 'Rua Augusta, 1500 - Consolação, São Paulo', '(11) 99999-0000');

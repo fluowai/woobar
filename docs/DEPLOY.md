@@ -58,20 +58,24 @@ O schema/migrations rodam sozinhos no startup. Os **dados iniciais** (estabeleci
 cardápio, usuários) precisam ser semeados uma única vez:
 
 ```bash
-docker exec woobar node dist/db/seed.js
+docker exec -e NODE_ENV=production `
+  -e SEED_ADMIN_PASSWORD='senha-forte-temporaria' `
+  -e SEED_STAFF_PASSWORD='outra-senha-forte-temporaria' `
+  woobar node dist/db/seed.js
 ```
 
-O seed é idempotente (pula se o `slug=woobar` já existir).
+O seed é idempotente (pula se o `slug=woobar` já existir). Em produção, as duas
+senhas devem ser fornecidas pelo ambiente e ter no mínimo 12 caracteres; não há
+mais credenciais padrão embutidas no seed.
 
 Credenciais iniciais (troque imediatamente no primeiro login):
 
 | E-mail | Senha | Papel |
 |---|---|---|
-| `admin@woobar.com` | `admin123` | admin |
-| `ana@woobar.com` | `123456` | attendant |
-| `carlos@woobar.com` | `123456` | kitchen |
-| `marcos@woobar.com` | `123456` | courier |
-| `julia@woobar.com` | `123456` | courier |
+As contas criadas usam as senhas temporárias informadas em `SEED_ADMIN_PASSWORD`
+e `SEED_STAFF_PASSWORD`. O comando `seed:users` também exige
+`SEED_SUPERADMIN_PASSWORD`. Troque as senhas no primeiro acesso e remova todas
+as variáveis do ambiente depois do seed.
 
 ---
 

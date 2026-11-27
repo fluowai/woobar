@@ -10,6 +10,10 @@ Data: 2026-10-28
 - `git diff --check`: há avisos de CRLF/trailing whitespace no `DEV/WORKLOG.md` preexistente; não foi reformatado para preservar alterações do checkout.
 - Docker não está instalado neste ambiente; `docker compose config -q` não pôde ser executado.
 
+> Nota: esta linha é histórica. Docker está disponível na auditoria de 27/11/2026;
+> a validação atual deve ser feita com `docker compose config -q` e as variáveis
+> obrigatórias preenchidas.
+
 ## Ajustes aplicados nesta execução
 
 - Adicionada validação para impedir `APP_URL` e `CORS_ORIGIN` com `localhost` ou `127.0.0.1` em produção.

@@ -88,8 +88,9 @@ npm run preview
 # ou servir a pasta dist/ pelo seu servidor web favorito
 ```
 
-### Credenciais Padrão de Acesso Inicial:
-- **Admin:** `admin@woobar.com` | Senha: `admin123`
-- **Garçom:** `pedro@woobar.com` | Senha: `123456`
-> *Recomendação de Segurança:* Acesse a tela de **Usuários** (`/users`) e altere as senhas padrão logo após o primeiro login de produção.
+### Acesso inicial
+
+Em produção, o seed não usa credenciais padrão. Informe `SEED_ADMIN_PASSWORD` e
+`SEED_STAFF_PASSWORD` somente durante a primeira execução, com pelo menos 12
+caracteres, faça o primeiro login e remova essas variáveis do ambiente.
 

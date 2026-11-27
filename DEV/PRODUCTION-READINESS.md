@@ -52,32 +52,38 @@ No entanto, para uma operação comercial real em restaurante ou bar no Brasil, 
   - Gerar `JWT_SECRET` com 32+ caracteres em produção (`openssl rand -hex 32`).
   - Gerar `FISCAL_TOKEN` forte compartilhado entre Node e PHP.
   - Alterar senhas padrão dos usuários semeados (`admin@woobar.com`, `superadmin@woobar.com`).
-- [ ] **4. Deploy com TLS/HTTPS**:
+- [x] **4. Deploy com TLS/HTTPS**:
   - Configurar Caddy ou Nginx com certificado Let's Encrypt na frente da porta 3001.
   - Definir `CORS_ORIGIN=https://seu-dominio.com` e `APP_URL=https://seu-dominio.com`.
   - Configurar repasse de headers de WebSocket (`Upgrade` / `Connection`).
+
+  - O Compose agora monta o `Caddyfile` parametrizado por `APP_DOMAIN`; não há domínio fixo no comando do proxy.
+
+- [x] **5. Seed seguro em produção**:
+  - O seed não possui mais credenciais padrão efetivas em `NODE_ENV=production`.
+  - `SEED_ADMIN_PASSWORD` e `SEED_STAFF_PASSWORD` são obrigatórias e exigem no mínimo 12 caracteres.
 
 ---
 
 ### Fase 2: Homologação com Terceiros & Hardware Local (P1)
 
-- [ ] **5. Credenciamento nos Marketplaces**:
+- [ ] **6. Credenciamento nos Marketplaces**:
   - Obter `client_id`, `client_secret` e `merchant_id` no Portal do Desenvolvedor do iFood.
   - Rodar o ciclo de testes de homologação exigido pelo iFood (recebimento, aceite, despacho e cancelamento).
   - Preencher credenciais dos canais ativos na aba `/channels`.
-- [ ] **6. Instalação do Agente de Impressão na Loja**:
+- [ ] **7. Instalação do Agente de Impressão na Loja**:
   - Rodar `print-agent` no microterminal ou computador do balcão/caixa conectado à impressora térmica de 80mm.
   - Testar impressão de cupom de conferência e comanda de produção.
-- [ ] **7. Baixa Automática de Insumos**:
+- [ ] **8. Baixa Automática de Insumos**:
   - Vincular receitas do cardápio aos insumos do estoque para debitar automaticamente quantidades no fechamento de pedidos.
 
 ---
 
 ### Fase 3: Monitoramento e Resiliência (P2)
 
-- [ ] **8. Rotina de Backup em Nuvem**:
+- [ ] **9. Rotina de Backup em Nuvem**:
   - O backup local do SQLite já ocorre a cada 24h em `/app/data/backups`. Recomenda-se espelhar periodicamente para um bucket S3/GCS ou storage externo.
-- [ ] **9. Alertas de Erro (Sentry ou Uptime)**:
+- [ ] **10. Alertas de Erro (Sentry ou Uptime)**:
   - Adicionar monitoramento no `/api/health` para avisar em caso de indisponibilidade da API ou do banco.
 
 ### Hardening concluído nesta execução

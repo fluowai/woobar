@@ -1,8 +1,15 @@
 import 'dotenv/config';
 
-const SUPER_PASS = 'Wb!-vbX6RsqJoq7JyK0#9';
-const ADMIN_PASS = 'admin123';
-const STAFF_PASS = '123456';
+function requiredSeedPassword(name: string): string {
+  const value = process.env[name] || '';
+  if (!value) throw new Error(`❌ ${name} deve ser informada pelo ambiente`);
+  if (value.length < 12) throw new Error(`❌ ${name} deve ter no mínimo 12 caracteres`);
+  return value;
+}
+
+const SUPER_PASS = requiredSeedPassword('SEED_SUPERADMIN_PASSWORD');
+const ADMIN_PASS = requiredSeedPassword('SEED_ADMIN_PASSWORD');
+const STAFF_PASS = requiredSeedPassword('SEED_STAFF_PASSWORD');
 
 if (process.env.NODE_ENV === 'production') {
   throw new Error('❌ seed:users bloqueado em produção: não use credenciais padrão. Crie usuários com senhas fortes pelo painel ou via migração segura.');

@@ -58,19 +58,14 @@ services:
     restart: unless-stopped
     environment:
       - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN obrigatório em produção}
-    command:
-      - caddy
-      - reverse-proxy
-      - --from
-      - woobar.wootech.com.br
-      - --to
-      - http://woobar:3001
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
     depends_on:
       woobar:
         condition: service_healthy

@@ -22,9 +22,9 @@ Detalhes: `DEV/WORKLOG.md`. Contrato: `DEV/SPECS/ACTIVE.md`.
 | Papel | Email | Senha |
 |---|---|---|
 | superadmin (sem tenant) | `superadmin@woobar.com` | `Super1234` |
-| admin (dono) | `admin@woobar.com` | `admin123` |
-| garçom / copa / gerente | `pedro@` / `fernanda@` / `roberto@woobar.com` | `123456` |
-| cozinha / entregador / atendente | `carlos@` / `marcos@`,`julia@` / `ana@woobar.com` | `123456` |
+| admin (dono) | `admin@woobar.com` | definida por `SEED_ADMIN_PASSWORD` |
+| garçom / copa / gerente | `pedro@` / `fernanda@` / `roberto@woobar.com` | definida por `SEED_STAFF_PASSWORD` |
+| cozinha / entregador / atendente | `carlos@` / `marcos@`,`julia@` / `ana@woobar.com` | definida por `SEED_STAFF_PASSWORD` |
 
 ## Atenção
 
